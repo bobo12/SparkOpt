@@ -105,11 +105,12 @@ object TestAlgorithm {
 
     val At = algebra.transpose(data.matrix)
     val lambdaMax = algebra.normInfinity(At.zMult(bTilde,null).assign(DoubleFunctions.abs))
-
+    println("lmax: " + lambdaMax.toString)
     val lambda = coefflambda * lambdaMax
+    println("lam : " + lambda.toString)
 
     val sc = new SparkContext("local", "testing")
-    val rddSet: RDD[ReutersSet] = sc.parallelize(data.singleSet,nSplits)
+    val rddSet: RDD[ReutersSet] = sc.parallelize(data.dataSet(nSplits),nSplits)
 
     val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter)
 
