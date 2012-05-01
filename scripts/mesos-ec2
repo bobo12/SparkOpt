@@ -1,0 +1,3 @@
+#!/bin/sh
+cd "`dirname $0`"
+PYTHONPATH="$PYTHONPATH:./boto-2.0b2" python ./mesos_ec2.py $@

@@ -1,0 +1,6 @@
+out/
+.idea/
+*~
+*pyc
+.idea_modules/
+target/
