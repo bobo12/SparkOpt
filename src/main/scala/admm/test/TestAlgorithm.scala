@@ -112,6 +112,8 @@ object TestAlgorithm {
     /*
     val xEst = SLRSparkImmutable.solve(rddSet)
     */
+    //so that it can compile
+    val xEst = DoubleFactory1D.dense.make(n)
 
     val wtrue = data.parameter
     val vtrue = data.offset
