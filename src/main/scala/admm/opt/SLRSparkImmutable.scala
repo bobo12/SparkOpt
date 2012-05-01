@@ -62,7 +62,6 @@ object SLRSparkImmutable {
               normTerm.assign(z, DoubleFunctions.minus)
                 .assign(u, DoubleFunctions.plus)
               val myRho = rho
-              println(myRho)
               val alg = algebra
               val norm = alg.norm2(normTerm)
               val pow = math.pow(norm, 2)

@@ -2,13 +2,15 @@ package admm.test
 
 import util.Random
 import cern.jet.math.tdouble.DoubleFunctions
-import cern.colt.matrix.tdouble.{DoubleFactory2D, DoubleFactory1D, DoubleMatrix1D, DoubleMatrix2D}
 import cern.colt.matrix.tdouble.algo.DenseDoubleAlgebra
 import admm.data.ReutersData.ReutersSet
 import admm.data.ReutersData
-import spark.SparkContext
 import admm.util.ADMMFunctions
 import admm.opt.SLRSparkImmutable
+import spark.{RDD, SparkContext}
+import admm.util.ListHelper._
+import cern.colt.matrix.tdouble.{DoubleFactory1D, DoubleFactory2D, DoubleMatrix1D, DoubleMatrix2D}
+
 
 /**
  * Created by IntelliJ IDEA.
@@ -20,7 +22,7 @@ import admm.opt.SLRSparkImmutable
 
 object TestAlgorithm {
 
-  class TestSet(aMatrix: DoubleMatrix2D, bVector: DoubleMatrix1D) extends ReutersSet{
+  class TestSet(aMatrix: DoubleMatrix2D, bVector: DoubleMatrix1D) extends ReutersSet with Serializable{
     val samples = aMatrix
     def outputs(topicId: ReutersData.TopicId) = {
       if (topicId!=0) {
@@ -34,7 +36,15 @@ object TestAlgorithm {
     val aux = A.zMult(w,null).assign(DoubleFunctions.plus(v))
     val bTrue = aux.copy().assign(DoubleFunctions.sign).assign(DoubleFunctions.plus(1.0)).assign(DoubleFunctions.div(2.0))
     val bNoise = aux.copy().assign(noise,DoubleFunctions.plus).assign(DoubleFunctions.sign).assign(DoubleFunctions.plus(1.0)).assign(DoubleFunctions.div(2.0))
-    val dataSet = new TestSet(A,bNoise)
+    def dataSet(implicit nSlices: Int = 1) = {
+      val chunkSize = A.rows() / nSlices
+      val splitA = A.toArray.toList.chunk(chunkSize)
+      val splitB = bNoise.toArray.toList.chunk(chunkSize)
+      splitA.zip(splitB).map{ case (a,b) => {
+        new TestSet(DoubleFactory2D.sparse.make(a.toArray),DoubleFactory1D.sparse.make(b.toArray))
+      }}
+    }
+    def singleSet = List(new TestSet(A, bNoise))
     val matrix = A
     val parameter = w
     val offset = v
@@ -69,6 +79,7 @@ object TestAlgorithm {
     val proportion = args(6).toDouble //proportion of positive results (rare events)
     //for now we don't use termination criteria, just do the max iterations
     val maxIter = args(7).toInt //for now
+    val nSplits = args(8).toInt
 
     val stdNoise = DoubleFunctions.sqrt(0.1)
     val data = createData(m,n,sparsityA,sparsityW,stdNoise)
@@ -97,23 +108,10 @@ object TestAlgorithm {
 
     val lambda = coefflambda * lambdaMax
 
-    //get data
-    //TODO there must be a way to set the proportion of ones and zeros
-    //TODO be able to change the lambda, rho and maxIter values
-    /*SLRSparkImmutable.lambda = lambda
-    SLRSparkImmutable.rho = rho
-    SLRSparkImmutable.maxIter = maxIter */
-
     val sc = new SparkContext("local", "testing")
-    val rddSet = sc.parallelize(List(data.dataSet),1)
+    val rddSet: RDD[ReutersSet] = sc.parallelize(data.singleSet,nSplits)
 
-    //val xEst =  solve(rddSet)
-    //TODO fix that type mismatch error
-    /*
-    val xEst = SLRSparkImmutable.solve(rddSet)
-    */
-    //so that it can compile
-    val xEst = DoubleFactory1D.dense.make(n)
+    val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter)
 
     val wtrue = data.parameter
     val vtrue = data.offset
