@@ -32,6 +32,7 @@ def make_master():
     return '1@%s:5050' % get_address()
 
 def concat_commands(cmds):
+    print cmds
     if isinstance(cmds,list):
         return ';'.join(cmds)
     return cmds
@@ -47,15 +48,31 @@ def copy_dir_remote(path):
 def open_web_ui():
     run_cmd('open http://%s:8080' % get_address())
 
+def remote_dir_address(add_dir):
+    return 'root@%s:%s' % (get_address(), add_dir)
+
+def quotize(ln):
+    return "'%s'" % ln
+
 def rsync(from_dir, to_dir):
-    return (("rsync -rv -e 'ssh -o StrictHostKeyChecking=no -i %s' " + 
-                "'%s' 'root@%s:%s'") % (IDENTITY_FILE, from_dir, get_address(), to_dir))
+    return ("rsync -rv -e 'ssh -o StrictHostKeyChecking=no -i %s' %s %s") % (IDENTITY_FILE, quotize(from_dir), quotize(to_dir))
+
+def rsync_remote(local, remote, to_remote = True):
+    remote = remote_dir_address(remote)
+    if to_remote:
+        to_path = remote
+        from_path = local
+    else:
+        to_path = local
+        from_path = remote
+    return rsync(from_path, to_path)
+        
 
 def sync_target():
-    return rsync(os.path.join(MAIN_DIR, 'target'), REMOTE_SPARKOPT)
+    return rsync_remote(os.path.join(MAIN_DIR, 'target'), REMOTE_SPARKOPT)
 
 def sync_jars():
-    return rsync(os.path.join(MAIN_DIR, 'lib'), REMOTE_SPARKOPT)
+    return rsync_remote(os.path.join(MAIN_DIR, 'lib'), REMOTE_SPARKOPT)
 
 def remote_cmd(cmd):
     return 'ssh -i %s root@%s "%s"' % (IDENTITY_FILE, get_address(), concat_commands(cmd))
@@ -74,6 +91,12 @@ def run_spark(cmd, update = False):
         code_sync()
     run_cmd(remote_cmd('/root/spark/run %s' % cmd))    
 
+def run_spark_program(prog_name, *args, **kwargs):
+    update = kwargs.get('update',False)
+    if update:
+        code_sync()
+    run_cmd(remote_cmd('/root/spark/run %s %s' % (prog_name, ' '.join(map(str,args)))))
+
 def store_hdfs(web_address, local_path):
     pull = 'wget %s' % web_address
     store = '/root/persistent-hdfs/bin/hadoop fs -put %s %s' % (web_address.split('/')[-1], local_path)
@@ -88,9 +111,10 @@ def add_master_env_var():
     store_env_var('master', '$(cat /root/mesos-ec2/cluster-url)')
 
 
-def post_init(big = False):
-    store_hdfs('https://s3.amazonaws.com/admmdata/labeled_rcv1.admm.data', 'smalldata')
-    if big:
+def post_init(big_data = False, small_data = True):
+    if small_data:
+        store_hdfs('https://s3.amazonaws.com/admmdata/labeled_rcv1.admm.data', 'smalldata')
+    if big_data:
         store_hdfs('https://s3.amazonaws.com/admmdata/bigdata_labeled.svm', 'bigdata')
     init_sync()
 
@@ -108,9 +132,3 @@ def start_cluster():
     run_cmd('./mesos-ec2 start admm')
 def destroy_cluster():
     run_cmd('./mesos-ec2 destroy admm')
-
-def run_trial(n_slaves = 1):
-    launch_cluster(n_slaves)
-    post_init(False)
-    run_admm_opt('',10000, 1000, 50, 0, 2, True)
-    destroy_cluster()

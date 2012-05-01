@@ -10,6 +10,7 @@ import admm.opt.SLRSparkImmutable
 import spark.{RDD, SparkContext}
 import admm.util.ListHelper._
 import cern.colt.matrix.tdouble.{DoubleFactory1D, DoubleFactory2D, DoubleMatrix1D, DoubleMatrix2D}
+import java.io.FileWriter
 
 
 /**
@@ -80,6 +81,9 @@ object TestAlgorithm {
     //for now we don't use termination criteria, just do the max iterations
     val maxIter = args(7).toInt //for now
     val nSplits = args(8).toInt
+    val outFile = args(9)
+    val host = args(10)
+    val fn = new FileWriter(outFile)
 
     val stdNoise = DoubleFunctions.sqrt(0.1)
     val data = createData(m,n,sparsityA,sparsityW,stdNoise)
@@ -109,7 +113,7 @@ object TestAlgorithm {
     val lambda = coefflambda * lambdaMax
     println("lam : " + lambda.toString)
 
-    val sc = new SparkContext("local", "testing")
+    val sc = new SparkContext(host, "testing")
     val rddSet: RDD[ReutersSet] = sc.parallelize(data.dataSet(nSplits),nSplits)
 
     val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter)
@@ -131,8 +135,8 @@ object TestAlgorithm {
     //see if the classifier does well
     val bEquals = bEst.copy()
     bEquals.assign(data.bNoise,DoubleFunctions.equals)
-    println("bEquals")
-    bEquals.toArray().foreach(b=>println(b))
+    fn.write("bEquals\n")
+    bEquals.toArray().foreach(b=> fn.write(b.toString + "\n" ))
     val totalSuccess = bEquals.zSum() / m
 
     val newbPos = bEst.toArray().zip(data.bNoise.toArray()).filter(_._2 == 1).map(_._1)
@@ -141,8 +145,8 @@ object TestAlgorithm {
       case 1 => {nbPos+=1}
       case _ => {}
     })
-    println("original number of positive")
-    println(newbPos.size)
+    fn.write("original number of positive\n")
+    fn.write(newbPos.size.toString + "\n")
     val positiveSuccess = (1.0*nbPos)/newbPos.size
 
     val newbNeg = bEst.toArray().zip(data.bNoise.toArray()).filter(_._2 == 0).map(_._1)
@@ -151,22 +155,23 @@ object TestAlgorithm {
       case 0 => {nbNeg+=1}
       case _ => {}
     }})
-    println("original number of negative")
-    println(newbNeg.size)
+    fn.write("original number of negative" + "\n")
+    fn.write(newbNeg.size.toString + "\n")
     val negativeSuccess = (1.0*nbNeg)/newbNeg.size
 
-    println("---------------------------------------------------------")
-    println("norm 2 of difference between wTrue and wEst")
-    println(diffParam)
-    println("difference between vTrue and vEst")
-    println(diffOffset)
-    println("total Success Rate")
-    println(totalSuccess)
-    println("positive success rate")
-    println(positiveSuccess)
-    println("negative success rate")
-    println(negativeSuccess)
-
+    fn.write("---------------------------------------------------------"+ "\n")
+    fn.write("norm 2 of difference between wTrue and wEst"+ "\n")
+    fn.write(diffParam.toString+ "\n")
+    fn.write("difference between vTrue and vEst"+ "\n")
+    fn.write(diffOffset.toString+ "\n")
+    fn.write("total Success Rate"+ "\n")
+    fn.write(totalSuccess.toString+ "\n")
+    fn.write("positive success rate"+ "\n")
+    fn.write(positiveSuccess.toString+ "\n")
+    fn.write("negative success rate"+ "\n")
+    fn.write(negativeSuccess.toString+ "\n")
+    fn.close()
+    sc.stop()
   }
 
 }

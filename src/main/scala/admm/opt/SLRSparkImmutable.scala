@@ -8,6 +8,7 @@ import admm.util.ADMMFunctions
 import admm.data.ReutersData.ReutersSet
 import admm.data.ReutersData
 import spark.{SparkContext, RDD}
+import java.io.FileWriter
 
 /**
  * User: jdr
@@ -168,12 +169,20 @@ object SLRSparkImmutable {
   def main(args: Array[String]) {
     val host = args(0)
     val nDocs = args(1).toInt
-    val nFeatures = args(2).toInt
+    val nFeatures = args(2).split(",").map(_.toInt)
     val nSplits = args(3).toInt
     val topicIndex = args(4).toInt
     val nIters = args(5).toInt
+    val filePath = args(6)
+    val outputPath = args(7)
     val hdfsPath = "/root/persistent-hdfs"
-    val filePath = "/user/root/smalldata"
-    SLRSparkImmutable.solve(ReutersData.slicedReutersRDD(new SparkContext(host, "test"),filePath,hdfsPath,nDocs,nFeatures,nSplits,topicIndex), _nIters= nIters)
+    val sc = new SparkContext(host, "test")
+    nFeatures.foreach(feat => {
+      val x = SLRSparkImmutable.solve(ReutersData.slicedReutersRDD(sc,filePath,hdfsPath,nDocs,feat,nSplits,topicIndex), _nIters= nIters)
+      val fn = new FileWriter(outputPath + feat.toString)
+      x.toArray.foreach(xVal => fn.write(xVal.toString + "\n"))
+      fn.close()
+    })
+    sc.stop()
   }
 }
