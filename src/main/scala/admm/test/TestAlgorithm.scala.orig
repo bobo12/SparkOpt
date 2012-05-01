@@ -8,9 +8,12 @@ import admm.data.ReutersData
 import admm.util.ADMMFunctions
 import admm.opt.SLRSparkImmutable
 import spark.{RDD, SparkContext}
+<<<<<<< HEAD
+=======
 import admm.util.ListHelper._
 import cern.colt.matrix.tdouble.{DoubleFactory1D, DoubleFactory2D, DoubleMatrix1D, DoubleMatrix2D}
 
+>>>>>>> exp-branch
 
 /**
  * Created by IntelliJ IDEA.
@@ -22,7 +25,11 @@ import cern.colt.matrix.tdouble.{DoubleFactory1D, DoubleFactory2D, DoubleMatrix1
 
 object TestAlgorithm {
 
+<<<<<<< HEAD
+  class TestSet(aMatrix: DoubleMatrix2D, bVector: DoubleMatrix1D) extends ReutersSet with Serializable {
+=======
   class TestSet(aMatrix: DoubleMatrix2D, bVector: DoubleMatrix1D) extends ReutersSet with Serializable{
+>>>>>>> exp-branch
     val samples = aMatrix
     def outputs(topicId: ReutersData.TopicId) = {
       if (topicId!=0) {
@@ -110,9 +117,15 @@ object TestAlgorithm {
     println("lam : " + lambda.toString)
 
     val sc = new SparkContext("local", "testing")
+<<<<<<< HEAD
+    val rddSet: RDD[ReutersSet] = sc.parallelize(List(data.dataSet),1)
+
+    val xEst = SLRSparkImmutable.solve(rddSet)
+=======
     val rddSet: RDD[ReutersSet] = sc.parallelize(data.dataSet(nSplits),nSplits)
 
     val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter)
+>>>>>>> exp-branch
 
     val wtrue = data.parameter
     val vtrue = data.offset
