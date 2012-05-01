@@ -6,9 +6,9 @@ import cern.colt.matrix.tdouble.{DoubleFactory2D, DoubleFactory1D, DoubleMatrix1
 import cern.colt.matrix.tdouble.algo.DenseDoubleAlgebra
 import admm.data.ReutersData.ReutersSet
 import admm.data.ReutersData
-import spark.SparkContext
 import admm.util.ADMMFunctions
 import admm.opt.SLRSparkImmutable
+import spark.{RDD, SparkContext}
 
 /**
  * Created by IntelliJ IDEA.
@@ -20,7 +20,7 @@ import admm.opt.SLRSparkImmutable
 
 object TestAlgorithm {
 
-  class TestSet(aMatrix: DoubleMatrix2D, bVector: DoubleMatrix1D) extends ReutersSet{
+  class TestSet(aMatrix: DoubleMatrix2D, bVector: DoubleMatrix1D) extends ReutersSet with Serializable {
     val samples = aMatrix
     def outputs(topicId: ReutersData.TopicId) = {
       if (topicId!=0) {
@@ -105,15 +105,9 @@ object TestAlgorithm {
     SLRSparkImmutable.maxIter = maxIter */
 
     val sc = new SparkContext("local", "testing")
-    val rddSet = sc.parallelize(List(data.dataSet),1)
+    val rddSet: RDD[ReutersSet] = sc.parallelize(List(data.dataSet),1)
 
-    //val xEst =  solve(rddSet)
-    //TODO fix that type mismatch error
-    /*
     val xEst = SLRSparkImmutable.solve(rddSet)
-    */
-    //so that it can compile
-    val xEst = DoubleFactory1D.dense.make(n)
 
     val wtrue = data.parameter
     val vtrue = data.offset
