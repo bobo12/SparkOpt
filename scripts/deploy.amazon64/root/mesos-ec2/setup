@@ -250,9 +250,4 @@ sleep 2
 echo "Starting Mesos cluster..."
 ./start-mesos
 
-echo "add env variable"
-echo export master=$(cat ~/mesos-ec2/cluster-url) >> ~/.bashrc
 
-echo "download data and store in hdfs"
-wget https://s3.amazonaws.com/admmdata/labeled_rcv1.admm.data
-~/persistent-hdfs/bin/hadoop fs -put labeled_rcv1.admm.data data

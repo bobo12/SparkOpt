@@ -18,7 +18,8 @@ import spark.{SparkContext, RDD}
 object SLRSparkImmutable {
   val rho = 1.0
   val lambda = 0.1
-  def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda) =  {
+  val nIters = 10
+  def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters) =  {
 
     class DataEnv(samples: DoubleMatrix2D, outputs: DoubleMatrix1D) extends Serializable {
       val rho = _rho
@@ -162,7 +163,7 @@ object SLRSparkImmutable {
       }
       helper(init)
     }
-    iterate(updateSet, stopLearning, initSets, 10).take(1)(0).z
+    iterate(updateSet, stopLearning, initSets, _nIters).take(1)(0).z
   }
 
   def main(args: Array[String]) {
@@ -171,8 +172,9 @@ object SLRSparkImmutable {
     val nFeatures = args(2).toInt
     val nSplits = args(3).toInt
     val topicIndex = args(4).toInt
+    val nIters = args(5).toInt
     val hdfsPath = "/root/persistent-hdfs"
-    val filePath = "/user/root/data"
-    SLRSparkImmutable.solve(ReutersData.slicedReutersRDD(new SparkContext(host, "test"),filePath,hdfsPath,nDocs,nFeatures,nSplits,topicIndex))
+    val filePath = "/user/root/smalldata"
+    SLRSparkImmutable.solve(ReutersData.slicedReutersRDD(new SparkContext(host, "test"),filePath,hdfsPath,nDocs,nFeatures,nSplits,topicIndex), _nIters= nIters)
   }
 }
