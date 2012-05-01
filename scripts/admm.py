@@ -10,6 +10,8 @@ MAIN_DIR = '../'
 
 REMOTE_SPARKOPT = '/root/SparkOpt/'
 
+IDENTITY_FILE = '/Users/jdr/.ec2/admm.pem'
+
 address = None
 def get_address():
     global address
@@ -47,7 +49,7 @@ def open_web_ui():
 
 def rsync(from_dir, to_dir):
     return (("rsync -rv -e 'ssh -o StrictHostKeyChecking=no -i %s' " + 
-                "'%s' 'root@%s:%s'") % ('/Users/jdr/.ec2/admm.pem', from_dir, get_address(), to_dir))
+                "'%s' 'root@%s:%s'") % (IDENTITY_FILE, from_dir, get_address(), to_dir))
 
 def sync_target():
     return rsync(os.path.join(MAIN_DIR, 'target'), REMOTE_SPARKOPT)
@@ -56,7 +58,7 @@ def sync_jars():
     return rsync(os.path.join(MAIN_DIR, 'lib'), REMOTE_SPARKOPT)
 
 def remote_cmd(cmd):
-    return 'ssh -i %s root@%s "%s"' % ('/Users/jdr/.ec2/admm.pem', get_address(), concat_commands(cmd))
+    return 'ssh -i %s root@%s "%s"' % (IDENTITY_FILE, get_address(), concat_commands(cmd))
 
 
 def init_sync():
