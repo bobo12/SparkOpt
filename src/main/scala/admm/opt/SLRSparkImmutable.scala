@@ -17,10 +17,11 @@ import java.io.FileWriter
  */
 
 object SLRSparkImmutable {
-  val rho = 1.0
-  val lambda = 0.1
-  val nIters = 10
+  var rho = 1.0
+  var lambda = 0.1
+  var nIters = 10
   def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters) =  {
+    val nSlices = rdd.count() // needed on master machine only
 
     class DataEnv(samples: DoubleMatrix2D, outputs: DoubleMatrix1D) extends Serializable {
       val rho = _rho
@@ -123,31 +124,33 @@ object SLRSparkImmutable {
       }
     }
 
-    val nSlices = rdd.count()
-    val dataEnvs = rdd.map(split => {
-      new DataEnv(split.samples, split.outputs(0))
-    }).cache()
-
-    val initSets = dataEnvs.map(_.initLearningEnv)
-
     def updateSet(oldSet: RDD[DataEnv#LearningEnv]) = {
-      val xLS = oldSet.map(_.xUpdateEnv)
+      val xLS = oldSet
+        .map(_.xUpdateEnv)
+        .cache()
+
       val z = {
-        val sums = xLS.map(ls => {
+
+        val reduced = xLS
+          .map(ls => {
           val sum = ls.x.copy()
           sum.assign(ls.u, DoubleFunctions.plus)
-          sum
-        })
-        val reduced = sums.reduce( (a, b) => {
-          a.assign(b,DoubleFunctions.plus)
-        })
-        reduced.assign(DoubleFunctions.div(nSlices.toDouble)).assign(ADMMFunctions.shrinkage(_lambda/_rho/nSlices.toDouble))
+          sum})
+          .reduce( (a, b) => {
+          a.assign(b,DoubleFunctions.plus)})
+
+        reduced
+          .assign(DoubleFunctions.div(nSlices.toDouble))
+          .assign(ADMMFunctions.shrinkage(_lambda/_rho/nSlices.toDouble))
+
         reduced
       }
-      val uLS = xLS.map(_.zUpdateEnv(z)).map(_.uUpdateEnv)
-      println(uLS.take(1)(0).z.cardinality())
-      uLS
+
+      xLS.map(_.zUpdateEnv(z))
+        .map(_.uUpdateEnv)
+        .cache()
     }
+
     def stopLearning(rdd: RDD[DataEnv#LearningEnv]): Boolean = {
       false
     }
@@ -163,26 +166,17 @@ object SLRSparkImmutable {
       }
       helper(init)
     }
-    iterate(updateSet, stopLearning, initSets, _nIters).take(1)(0).z
+
+
+    iterate(updateSet,
+      stopLearning,
+      rdd.map(split => {
+        new DataEnv(split.samples, split.outputs(0))
+      }).cache()
+        .map(_.initLearningEnv)
+        .cache(), _nIters)
+      .take(1)(0)
+      .z
   }
 
-  def main(args: Array[String]) {
-    val host = args(0)
-    val nDocs = args(1).toInt
-    val nFeatures = args(2).split(",").map(_.toInt)
-    val nSplits = args(3).toInt
-    val topicIndex = args(4).toInt
-    val nIters = args(5).toInt
-    val filePath = args(6)
-    val outputPath = args(7)
-    val hdfsPath = "/root/persistent-hdfs"
-    val sc = new SparkContext(host, "test")
-    nFeatures.foreach(feat => {
-      val x = SLRSparkImmutable.solve(ReutersData.slicedReutersRDD(sc,filePath,hdfsPath,nDocs,feat,nSplits,topicIndex), _nIters= nIters)
-      val fn = new FileWriter(outputPath + feat.toString)
-      x.toArray.foreach(xVal => fn.write(xVal.toString + "\n"))
-      fn.close()
-    })
-    sc.stop()
-  }
 }
