@@ -16,7 +16,7 @@ import admm.stats.SuccessRate.successRate
 
 object ParallelizedSyntheticData {
 
-  class ParSynSet(_samples: DoubleMatrix2D, _outputs: DoubleMatrix1D) extends ReutersSet with Serializable {
+  case class ParSynSet(_samples: DoubleMatrix2D, _outputs: DoubleMatrix1D) extends ReutersSet {
     def outputs(tid: Int) = _outputs
     def samples = _samples
   }
@@ -24,27 +24,19 @@ object ParallelizedSyntheticData {
   def generate_data(sc: SparkContext, nSamples: Int, nFeatures: Int, nSplits: Int, sparsityA: Double, sparsityW: Double) = {
     val sPerS = nSamples / nSplits
     val w = sc.broadcast(ADMMFunctions.sprandnvec(nFeatures,sparsityW))
-    val v = sc.broadcast(w.value.zSum()/w.value.size().toDouble*0)
+    val v = sc.broadcast(-1*w.value.zSum()/w.value.size().toDouble)
     sc.parallelize(1 to nSplits).map(_ => {
       val A = ADMMFunctions.sprandnMatrix(sPerS, nFeatures, sparsityA)
       val b = {
         val bDense = A
           .zMult(w.value,null)
           .assign(DoubleFunctions.plus(v.value))
-          .assign(ADMMFunctions.sprandnvec(sPerS, .1).assign(DoubleFunctions.mult(.01)), DoubleFunctions.plus)
           .assign(DoubleFunctions.sign)
           .assign(DoubleFunctions.plus(1))
           .assign(DoubleFunctions.div(2))
         DoubleFactory1D.sparse.make(bDense.toArray)
       }
-      new ParSynSet(A,b).asInstanceOf[ReutersSet]
+      ParSynSet(A,b).asInstanceOf[ReutersSet]
     })
-  }
-  def main(args: Array[String]){
-    val sc = new SparkContext("local","test")
-    println(":::" + successRate(generate_data(sc, 100, 50, 2, .01, .5)).toString())
-    println(":::" + successRate(generate_data(sc, 100, 50, 2, .01, .5)).toString())
-    println(":::" + successRate(generate_data(sc, 100, 50, 2, .01, .5)).toString())
-    println(":::" + successRate(generate_data(sc, 100, 50, 2, .01, .5)).toString())
   }
 }

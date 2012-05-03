@@ -18,8 +18,8 @@ import java.io.FileWriter
 
 object SLRSparkImmutable {
   var rho = 1.0
-  var lambda = 0.1
-  var nIters = 10
+  var lambda = 0.01
+  var nIters = 5
   var topicId = 0
   def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters) =  {
     val nSlices = rdd.count() // needed on master machine only

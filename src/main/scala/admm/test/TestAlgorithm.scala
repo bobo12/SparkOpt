@@ -64,9 +64,7 @@ object TestAlgorithm {
     val A = ADMMFunctions.sprandnMatrix(m,n, sparsityA)
     //noise
     val noise = ADMMFunctions.sprandnvec(m,1.0).assign(DoubleFunctions.mult(noiseStd))
-    val aux = A.zMult(w,null).assign(DoubleFunctions.plus(v))
-    val out = new BaseLineDataSet(A,w,v,noise)
-    out
+    new BaseLineDataSet(A,w,v,noise)
   }
 
   def main(args: Array[String]) {
