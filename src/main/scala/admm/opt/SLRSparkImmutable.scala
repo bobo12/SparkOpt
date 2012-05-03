@@ -20,6 +20,7 @@ object SLRSparkImmutable {
   var rho = 1.0
   var lambda = 0.1
   var nIters = 10
+  var topicId = 0
   def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters) =  {
     val nSlices = rdd.count() // needed on master machine only
 
@@ -39,6 +40,7 @@ object SLRSparkImmutable {
       val m = samples.rows()
       case class LearningEnv(x: DoubleMatrix1D, u: DoubleMatrix1D, z: DoubleMatrix1D) {
         def xUpdateEnv = {
+          println("update x....")
           val xNew = {
             def gradient(x: DoubleMatrix1D): DoubleMatrix1D = {
               val expTerm = C.zMult(x, null)
@@ -108,6 +110,7 @@ object SLRSparkImmutable {
           new LearningEnv(xNew, u, z)
         }
         def uUpdateEnv = {
+          println("update u....")
           val uNew = {
             val newU = u.copy()
             newU.assign(x,DoubleFunctions.plus).assign(z,DoubleFunctions.minus)
@@ -171,7 +174,7 @@ object SLRSparkImmutable {
     iterate(updateSet,
       stopLearning,
       rdd.map(split => {
-        new DataEnv(split.samples, split.outputs(0))
+        new DataEnv(split.samples, split.outputs(topicId))
       }).cache()
         .map(_.initLearningEnv)
         .cache(), _nIters)
