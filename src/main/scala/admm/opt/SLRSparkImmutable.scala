@@ -9,6 +9,7 @@ import admm.data.ReutersData.ReutersSet
 import admm.data.ReutersData
 import spark.{SparkContext, RDD}
 import java.io.FileWriter
+import collection.mutable.ArrayBuffer
 
 /**
  * User: jdr
@@ -113,15 +114,17 @@ object SLRSparkImmutable {
             def descent(x0: DoubleMatrix1D, maxIter: Int): DoubleMatrix1D = {
               val tol = 1e-4
               var counter = 0
+              val store = ArrayBuffer[Double]()
               def helper(xPrev: DoubleMatrix1D): DoubleMatrix1D = {
                 counter +=1
                 val grad = gradient(xPrev)
+                store+= algebra.norm2(grad)
                 val direction = grad.copy().assign(DoubleFunctions.neg)
-                val t = backtracking(x, direction, grad)
+                val t = backtracking(xPrev, direction, grad)
                 val xNext = xPrev.copy().assign(direction, DoubleFunctions.plusMultSecond(t))
                 if (algebra.norm2(grad) < tol || (counter >= maxIter)) {
                   println("last iter: " + counter.toString)
-                  println(algebra.norm2(grad))
+                  println(store)
                   xNext
                 }
                 else

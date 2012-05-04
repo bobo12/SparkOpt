@@ -35,7 +35,7 @@ object Launcher {
   }
 
   def localTest(args: Array[String]) {
-    val data = generate_data(sc, 500, 20, 5, .5, .5)
+    val data = generate_data(sc, 5000, 100, 10, .5, .5)
     println(successRate(data))
   }
 
