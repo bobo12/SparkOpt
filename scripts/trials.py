@@ -27,6 +27,16 @@ def features_trial(n_slaves = 1):
                  '%s%i' % (output_path, feat),
         False) for feat in n_features])
     stop_cluster()
+    
+def sparsity_trial(sparsities=[.01,.1,1.]):
+#    launch_cluster(12)
+    #init_sync()
+    output_path = '/root/sparse'
+    launch_trial(1, output_path, *sparsities)
+    run_cmd(rsync_remote('/Users/jdr/Desktop/sync',output_path, False))
+    destroy_cluster()
+    
+    
                       
     
     
@@ -45,4 +55,3 @@ def run_samples(n_slaves = 1):
         run_spark(cmd(f))
         run_cmd(rsync_remote('/Users/jdr/Desktop/synced_%i' % f, '%s_%i' % (out_file, f), False))
     stop_cluster()
-
