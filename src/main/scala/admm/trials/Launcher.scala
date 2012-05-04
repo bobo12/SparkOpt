@@ -13,12 +13,10 @@ import admm.data.ParallelizedSyntheticData.generate_data
 
 object Launcher {
 
-  val launchMap = HashMap(1 -> sparseTrial _)
-  var host = "local"
+  val launchMap = HashMap(1 -> sparseTrial _, 2-> localTest _)
+  var sc: SparkContext = null
 
   def sparseTrial(args: Array[String]) {
-    println("args: ")
-    args.foreach(println)
     val outFile = args(0)
     val sparsities = args.view(1, args.length).map(_.toDouble)
     println("sparsities are: ")
@@ -26,12 +24,9 @@ object Launcher {
     val nDocs = 50000
     val nFeatures = 300
     val nSlices = 50
-    val sc = new SparkContext(host, "test")
     val fn = new java.io.FileWriter(outFile)
     sparsities.foreach(sp => {
-      println(sp)
       val sln = successRate(generate_data(sc, nDocs, nFeatures, nSlices, sp, .5)).toString()
-      println(sln)
       fn.write(sp.toString + ":" + sln)
       fn.write("\n")
     })
@@ -39,10 +34,17 @@ object Launcher {
     sc.stop()
   }
 
+  def localTest(args: Array[String]) {
+    val data = generate_data(sc, 500, 20, 5, .5, .5)
+    println(successRate(data))
+  }
+
+
+
 
   def main(args: Array[String]) {
-    host = args(0)
     val trialId = args(1).toInt
+    sc = new SparkContext(args(0), "trial " + trialId.toString)
     val rest = args.length match {
       case 2 => Array[String]()
       case _ => args.view(2, args.length).toArray

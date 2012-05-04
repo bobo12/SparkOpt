@@ -17,6 +17,18 @@ import java.io.FileWriter
  */
 
 object SLRSparkImmutable {
+  def iterate[A](updateFn: A => A, stopFn: A => Boolean, init: A , maxIter: Int) = {
+    var iter = 0
+    def helper(oldValue: A): A = {
+      iter+=1
+      (stopFn(oldValue) || (iter > maxIter)) match {
+        case true => oldValue
+        case _ => helper(updateFn(oldValue))
+      }
+    }
+    helper(init)
+  }
+
   var rho = 1.0
   var lambda = 0.01
   var nIters = 10
@@ -43,35 +55,38 @@ object SLRSparkImmutable {
           println("update x....")
           val xNew = {
             def gradient(x: DoubleMatrix1D): DoubleMatrix1D = {
-              val expTerm = C.zMult(x, null)
-              expTerm.assign(DoubleFunctions.exp)
-              val firstTerm = expTerm.copy()
-              firstTerm.assign(DoubleFunctions.plus(1.0))
+              val expTerm = C.zMult(x, null).assign(DoubleFunctions.exp)
+
+              val firstTerm = expTerm
+                .copy()
+                .assign(DoubleFunctions.plus(1.0))
                 .assign(DoubleFunctions.inv)
                 .assign(expTerm, DoubleFunctions.mult)
-              val secondTerm = x.copy()
-              secondTerm.assign(z, DoubleFunctions.minus)
+
+              val secondTerm = x
+                .copy()
+                .assign(z, DoubleFunctions.minus)
                 .assign(u, DoubleFunctions.plus)
                 .assign(DoubleFunctions.mult(rho))
-              val returnValue = C.zMult(firstTerm, null, 1.0, 1.0, true)
-              returnValue.assign(secondTerm, DoubleFunctions.plus)
-              returnValue
+
+              C.zMult(firstTerm, null, 1.0, 1.0, true).assign(secondTerm, DoubleFunctions.plus)
             }
             def loss(x: DoubleMatrix1D): Double = {
-              val expTerm = C.zMult(x, null)
-              expTerm.assign(DoubleFunctions.exp)
+              val expTerm = C
+                .zMult(x, null)
+                .assign(DoubleFunctions.exp)
                 .assign(DoubleFunctions.plus(1.0))
                 .assign(DoubleFunctions.log)
-              val normTerm = x.copy()
-              normTerm.assign(z, DoubleFunctions.minus)
-                .assign(u, DoubleFunctions.plus)
-              val myRho = rho
-              val alg = algebra
-              val norm = alg.norm2(normTerm)
-              val pow = math.pow(norm, 2)
-              val sumExp = expTerm.zSum()
-              val totSum = sumExp + pow * myRho / 2
-              totSum
+                .zSum()
+
+              val normTerm = math
+                .pow(algebra.norm2(x
+                  .copy()
+                  .assign(z, DoubleFunctions.minus)
+                  .assign(u, DoubleFunctions.plus)),
+                2) * rho /2.0
+
+              expTerm + normTerm
             }
             def backtracking(x: DoubleMatrix1D, dx: DoubleMatrix1D, grad: DoubleMatrix1D): Double = {
               val t0 = 1.0
@@ -88,24 +103,34 @@ object SLRSparkImmutable {
                 lossX + t * rhsCacheTerm
               }
               def helper(t: Double): Double = {
-                if (lhs(t) > rhs(t)) helper(beta * t) else t
+                if (lhs(t) > rhs(t))
+                  helper(beta * t)
+                else
+                  t
               }
               helper(t0)
             }
             def descent(x0: DoubleMatrix1D, maxIter: Int): DoubleMatrix1D = {
               val tol = 1e-4
-              breakable {
-                for (i <- 1 to maxIter) {
-                  val dx = gradient(x0)
-                  dx.assign(DoubleFunctions.neg)
-                  val t = backtracking(x, dx, gradient(x0))
-                  x0.assign(dx, DoubleFunctions.plusMultSecond(t))
-                  if (algebra.norm2(dx) < tol) break()
+              var counter = 0
+              def helper(xPrev: DoubleMatrix1D): DoubleMatrix1D = {
+                counter +=1
+                val grad = gradient(xPrev)
+                val direction = grad.copy().assign(DoubleFunctions.neg)
+                val t = backtracking(x, direction, grad)
+                val xNext = xPrev.copy().assign(direction, DoubleFunctions.plusMultSecond(t))
+                if (algebra.norm2(grad) < tol || (counter >= maxIter)) {
+                  println("last iter: " + counter.toString)
+                  println(algebra.norm2(grad))
+                  xNext
                 }
+                else
+                  helper(xNext)
               }
-              x0
+              helper(x0)
             }
-            descent(x,10)
+
+            descent(x,100)
           }
           new LearningEnv(xNew, u, z)
         }
@@ -159,17 +184,7 @@ object SLRSparkImmutable {
       false
     }
 
-    def iterate[A](updateFn: A => A, stopFn: A => Boolean, init: A , maxIter: Int) = {
-      var iter = 0
-      def helper(oldValue: A): A = {
-        iter+=1
-        (stopFn(oldValue) || (iter > maxIter)) match {
-          case true => oldValue
-          case _ => helper(updateFn(oldValue))
-        }
-      }
-      helper(init)
-    }
+
 
 
     iterate(updateSet,
