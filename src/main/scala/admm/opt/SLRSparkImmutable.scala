@@ -144,6 +144,7 @@ object SLRSparkImmutable {
 
         reduced
           .assign(DoubleFunctions.div(nSlices.toDouble))
+          .viewPart(1,reduced.size().toInt - 1)
           .assign(ADMMFunctions.shrinkage(_lambda/_rho/nSlices.toDouble))
 
         reduced
