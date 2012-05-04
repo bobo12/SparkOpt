@@ -43,7 +43,8 @@ object TestAlgorithm {
       val splitB = bNoise.toArray.toList.chunk(chunkSize)
       splitA.zip(splitB).map{ case (a,b) => {
         new TestSet(DoubleFactory2D.sparse.make(a.toArray),DoubleFactory1D.sparse.make(b.toArray))
-      }}
+      }
+      }
     }
     def singleSet = List(new TestSet(A, bNoise))
     val matrix = A
@@ -60,7 +61,8 @@ object TestAlgorithm {
    */
   def createData(m :Int, n:Int, sparsityA : Double, sparsityW : Double, noiseStd : Double) : BaseLineDataSet =  {
     val w = ADMMFunctions.sprandnvec(n,sparsityW)
-    val v = Random.nextGaussian()
+    //val v = Random.nextGaussian()
+    val v = 0
     val A = ADMMFunctions.sprandnMatrix(m,n, sparsityA)
     //noise
     val noise = ADMMFunctions.sprandnvec(m,1.0).assign(DoubleFunctions.mult(noiseStd))
@@ -88,8 +90,11 @@ object TestAlgorithm {
 
     //calculate lambda max
     //val actualProportion = calculateProportion()
-    val posProportion = data.bNoise.zSum() / n
+    val posProportion = data.bNoise.zSum() / m
     val negProportion = 1.0 - posProportion
+    
+    println(posProportion)
+    println(negProportion)
 
     val bTilde = data.bNoise.copy()
     bTilde.assign(
@@ -106,7 +111,7 @@ object TestAlgorithm {
     val algebra = new DenseDoubleAlgebra()
 
     val At = algebra.transpose(data.matrix)
-    val lambdaMax = algebra.normInfinity(At.zMult(bTilde,null).assign(DoubleFunctions.abs))
+    val lambdaMax = algebra.normInfinity(At.zMult(bTilde,null))
     println("lmax: " + lambdaMax.toString)
     val lambda = coefflambda * lambdaMax
     println("lam : " + lambda.toString)
@@ -133,8 +138,8 @@ object TestAlgorithm {
     //see if the classifier does well
     val bEquals = bEst.copy()
     bEquals.assign(data.bNoise,DoubleFunctions.equals)
-    fn.write("bEquals\n")
-    bEquals.toArray().foreach(b=> fn.write(b.toString + "\n" ))
+//    fn.write("bEquals\n")
+//    bEquals.toArray().foreach(b=> fn.write(b.toString + "\n" ))
     val totalSuccess = bEquals.zSum() / m
 
     val newbPos = bEst.toArray().zip(data.bNoise.toArray()).filter(_._2 == 1).map(_._1)
@@ -158,6 +163,8 @@ object TestAlgorithm {
     val negativeSuccess = (1.0*nbNeg)/newbNeg.size
 
     fn.write("---------------------------------------------------------"+ "\n")
+    fn.write("wEst\n")
+    wEst.toArray().foreach(w=> fn.write(w.toString + "\n" ))
     fn.write("norm 2 of difference between wTrue and wEst"+ "\n")
     fn.write(diffParam.toString+ "\n")
     fn.write("difference between vTrue and vEst"+ "\n")
