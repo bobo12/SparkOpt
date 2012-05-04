@@ -19,7 +19,7 @@ import java.io.FileWriter
 object SLRSparkImmutable {
   var rho = 1.0
   var lambda = 0.01
-  var nIters = 5
+  var nIters = 10
   var topicId = 0
   def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters) =  {
     val nSlices = rdd.count() // needed on master machine only
@@ -144,6 +144,7 @@ object SLRSparkImmutable {
 
         reduced
           .assign(DoubleFunctions.div(nSlices.toDouble))
+          .viewPart(1,reduced.size().toInt - 1)
           .assign(ADMMFunctions.shrinkage(_lambda/_rho/nSlices.toDouble))
 
         reduced

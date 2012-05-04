@@ -96,6 +96,14 @@ def run_spark_program(prog_name, *args, **kwargs):
     if update:
         code_sync()
     run_cmd(remote_cmd('/root/spark/run %s %s' % (prog_name, ' '.join(map(str,args)))))
+    
+def launch_trial(trial_id, *args):
+    run_spark_program("admm.trials.Launcher", make_master(), trial_id, *args, update=True)
+    
+def start_stop_trial(trial_id, *args):
+    start_cluster()
+    launch_trial(trial_id, *args)
+    stop_cluster()
 
 def store_hdfs(web_address, local_path):
     pull = 'wget %s' % web_address
