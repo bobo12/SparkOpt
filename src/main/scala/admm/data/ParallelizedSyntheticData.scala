@@ -24,7 +24,8 @@ object ParallelizedSyntheticData {
   def generate_data(sc: SparkContext, nSamples: Int, nFeatures: Int, nSplits: Int, sparsityA: Double, sparsityW: Double) = {
     val sPerS = nSamples / nSplits
     val w = sc.broadcast(ADMMFunctions.sprandnvec(nFeatures,sparsityW))
-    val v = sc.broadcast(-1*w.value.zSum()/w.value.size().toDouble)
+    //val v = sc.broadcast(-1*w.value.zSum()/w.value.size().toDouble)
+    val v = sc.broadcast(Random.nextGaussian())
     sc.parallelize(1 to nSplits).map(_ => {
       val A = ADMMFunctions.sprandnMatrix(sPerS, nFeatures, sparsityA)
       val b = {

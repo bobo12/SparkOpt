@@ -9,6 +9,7 @@ import admm.data.ReutersData.ReutersSet
 import admm.data.ReutersData
 import spark.{SparkContext, RDD}
 import java.io.FileWriter
+import collection.mutable.ArrayBuffer
 
 /**
  * User: jdr
@@ -17,18 +18,6 @@ import java.io.FileWriter
  */
 
 object SLRSparkImmutable {
-  def iterate[A](updateFn: A => A, stopFn: A => Boolean, init: A , maxIter: Int) = {
-    var iter = 0
-    def helper(oldValue: A): A = {
-      iter+=1
-      (stopFn(oldValue) || (iter > maxIter)) match {
-        case true => oldValue
-        case _ => helper(updateFn(oldValue))
-      }
-    }
-    helper(init)
-  }
-
   var rho = 1.0
   var lambda = 0.01
   var nIters = 10
@@ -113,15 +102,17 @@ object SLRSparkImmutable {
             def descent(x0: DoubleMatrix1D, maxIter: Int): DoubleMatrix1D = {
               val tol = 1e-4
               var counter = 0
+              val store = ArrayBuffer[Double]()
               def helper(xPrev: DoubleMatrix1D): DoubleMatrix1D = {
                 counter +=1
                 val grad = gradient(xPrev)
+                store+= algebra.norm2(grad)
                 val direction = grad.copy().assign(DoubleFunctions.neg)
-                val t = backtracking(x, direction, grad)
+                val t = backtracking(xPrev, direction, grad)
                 val xNext = xPrev.copy().assign(direction, DoubleFunctions.plusMultSecond(t))
                 if (algebra.norm2(grad) < tol || (counter >= maxIter)) {
                   println("last iter: " + counter.toString)
-                  println(algebra.norm2(grad))
+                  println(store)
                   xNext
                 }
                 else
@@ -150,10 +141,6 @@ object SLRSparkImmutable {
           println(algebra.norm2(x))
           algebra.norm2(x)
         }
-        /*def zNorm() : Double = {
-          println(algebra.norm2(z))
-          algebra.norm2(z)
-        }*/
         def primalResidual : Double = {
           println(algebra.norm2(x.copy().assign(z,DoubleFunctions.minus)))
           algebra.norm2(x.copy().assign(z,DoubleFunctions.minus))
@@ -190,6 +177,7 @@ object SLRSparkImmutable {
 
         reduced
       }
+      Cache.stashZ(z)
 
       xLS.map(_.zUpdateEnv(z))
         .map(_.uUpdateEnv)
@@ -209,7 +197,7 @@ object SLRSparkImmutable {
         .reduce(_+_)
       println(primalResidual)
 
-      val xNorm = rdd.map(ls => ls.xNorm()).reduce(_+_)
+      /*val xNorm = rdd.map(ls => ls.xNorm()).reduce(_+_)
       println(xNorm)
       val zNorm = rdd.map(ls => ls.zNorm()).reduce(_+_)
       println(zNorm)
@@ -218,10 +206,10 @@ object SLRSparkImmutable {
       //epsPrimal computation uses same formula as Boyd's 3.3.1
       val epsPrimal = math.sqrt((avNbSamples+1)*nSlices)*absTol + relTol * math.max(xNorm,zNorm)
       println(epsPrimal)
-
+      */
       //compute dualResidual
 
-      println("stopLearning")
+      /*println("stopLearning")
       if (primalResidual<epsPrimal) {
         println("true")
         true
@@ -229,19 +217,42 @@ object SLRSparkImmutable {
       else {
         println("false")
         false
+      }*/
+      Cache.curZ // can do stuff with cache!
+      false
+    }
+
+    def iterate[A](updateFn: A => A, stopFn: A => Boolean, init: A , maxIter: Int) = {
+      var iter = 0
+      def helper(oldValue: A): A = {
+        iter+=1
+        (stopFn(oldValue) || (iter > maxIter)) match {
+          case true => oldValue
+          case _ => helper(updateFn(oldValue))
+        }
+      }
+      helper(init)
+    }
+
+    val learningEnvs = rdd.map(split => {
+      new DataEnv(split.samples, split.outputs(topicId))
+    }).cache()
+      .map(_.initLearningEnv)
+      .cache()
+
+    object Cache {
+      var prevZ: DoubleMatrix1D = null
+      var curZ: DoubleMatrix1D =  learningEnvs.take(1).head.z.copy()
+      def stashZ(newZ:DoubleMatrix1D) {
+        prevZ = curZ
+        curZ = newZ
       }
     }
 
-
-
-
     iterate(updateSet,
       stopLearning,
-      rdd.map(split => {
-        new DataEnv(split.samples, split.outputs(topicId))
-      }).cache()
-        .map(_.initLearningEnv)
-        .cache(), _nIters)
+      learningEnvs,
+      _nIters)
       .take(1)(0)
       .z
   }
