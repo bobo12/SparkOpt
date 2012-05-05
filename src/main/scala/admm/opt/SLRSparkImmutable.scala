@@ -216,11 +216,13 @@ object SLRSparkImmutable {
       .map(_.initLearningEnv)
       .cache()
 
+    val firstStep = updateSet(learningEnvs)
+
 
 
     iterate(updateSet,
       stopLearning,
-      learningEnvs,
+      firstStep,
       _nIters)
       .take(1)(0)
       .z
