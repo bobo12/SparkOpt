@@ -18,18 +18,6 @@ import collection.mutable.ArrayBuffer
  */
 
 object SLRSparkImmutable {
-  def iterate[A](updateFn: A => A, stopFn: A => Boolean, init: A , maxIter: Int) = {
-    var iter = 0
-    def helper(oldValue: A): A = {
-      iter+=1
-      (stopFn(oldValue) || (iter > maxIter)) match {
-        case true => oldValue
-        case _ => helper(updateFn(oldValue))
-      }
-    }
-    helper(init)
-  }
-
   var rho = 1.0
   var lambda = 0.01
   var nIters = 10
@@ -177,6 +165,7 @@ object SLRSparkImmutable {
 
         reduced
       }
+      Cache.stashZ(z)
 
       xLS.map(_.zUpdateEnv(z))
         .map(_.uUpdateEnv)
@@ -184,19 +173,41 @@ object SLRSparkImmutable {
     }
 
     def stopLearning(rdd: RDD[DataEnv#LearningEnv]): Boolean = {
+      Cache.curZ // can do stuff with cache!
       false
     }
 
+    def iterate[A](updateFn: A => A, stopFn: A => Boolean, init: A , maxIter: Int) = {
+      var iter = 0
+      def helper(oldValue: A): A = {
+        iter+=1
+        (stopFn(oldValue) || (iter > maxIter)) match {
+          case true => oldValue
+          case _ => helper(updateFn(oldValue))
+        }
+      }
+      helper(init)
+    }
 
+    val learningEnvs = rdd.map(split => {
+      new DataEnv(split.samples, split.outputs(topicId))
+    }).cache()
+      .map(_.initLearningEnv)
+      .cache()
 
+    object Cache {
+      var prevZ: DoubleMatrix1D = null
+      var curZ: DoubleMatrix1D =  learningEnvs.take(1).head.z.copy()
+      def stashZ(newZ:DoubleMatrix1D) {
+        prevZ = curZ
+        curZ = newZ
+      }
+    }
 
     iterate(updateSet,
       stopLearning,
-      rdd.map(split => {
-        new DataEnv(split.samples, split.outputs(topicId))
-      }).cache()
-        .map(_.initLearningEnv)
-        .cache(), _nIters)
+      learningEnvs,
+      _nIters)
       .take(1)(0)
       .z
   }
