@@ -23,10 +23,13 @@ object SLRSparkImmutable {
   var nIters = 10
   var topicId = 0
 
+  var absTol = 0.0001//this should be tuned
+  var relTol = 0.01//tuning less important because it's a relative value
 
-
-  def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters) =  {
-
+  def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters,
+             _absTol: Double = SLRSparkImmutable.absTol, _relTol: Double = SLRSparkImmutable.relTol,
+             fn:FileWriter = new FileWriter("outFile")) =  {
+    
     var algebra = new DenseDoubleAlgebra()
 
     object Cache {
@@ -44,6 +47,10 @@ object SLRSparkImmutable {
       val rho = _rho
       val lambda = _lambda
       var algebra = new DenseDoubleAlgebra()
+
+      val absTol = _absTol
+      val relTol = _relTol
+
       val C = {
         val bPrime = outputs.copy()
         bPrime.assign(DoubleFunctions.mult(2.0)).assign(DoubleFunctions.minus(1.0))
@@ -198,12 +205,8 @@ object SLRSparkImmutable {
         .cache()
     }
 
-    val absTol = 0.0001//this should be tuned
-    val relTol = 0.01//tuning less important because it's a relative value
-
     /*
-    Returns true iff the stopping criteria is met (just the primal residual now)
-    TODO : calculate the dual residual (it is more difficult though because it's between z and zold
+    Returns true iff the stopping criteria is met
      */
     def stopLearning(rdd: RDD[DataEnv#LearningEnv]): Boolean = {
       val primalResidual = rdd
@@ -229,11 +232,15 @@ object SLRSparkImmutable {
       if(epsPrimal>primalResidual) {
         retour = Cache.prevZ match {
           case None => {
+            println("none")
             // there is no prevZ so can't do anything!
             false
           }
           case _ => {
+            println("compute dual residual")
             val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
+            println("dual residual " + dualResidual)
+            println("dual epsilon" + epsDual)
             if(epsDual>dualResidual) true
             else false
           }
@@ -247,7 +254,18 @@ object SLRSparkImmutable {
       def helper(oldValue: A): A = {
         iter+=1
         (stopFn(oldValue) || (iter > maxIter)) match {
-          case true => oldValue
+          case true => {
+            println("---------------------------------------------------------------------")
+            println("NUMBER OF ADMM ITERATIONS" + iter)
+            if (iter>maxIter) print("because the maximum number of iterations was attained")
+            println("---------------------------------------------------------------------")
+            fn.write("\n")
+            fn.write("number of ADMM iterations" + iter )
+            if (iter>maxIter) fn.write(" because the maximum number of iterations was attained\n")
+            else fn.write("\n")
+            fn.write("\n")
+            oldValue
+          }
           case _ => helper(updateFn(oldValue))
         }
       }

@@ -82,8 +82,10 @@ object TestAlgorithm {
     //for now we don't use termination criteria, just do the max iterations
     val maxIter = args(7).toInt //for now
     val nSplits = args(8).toInt
-    val outFile = args(9)
-    val host = args(10)
+    val absTol = args(9).toDouble
+    val relTol = args(10).toDouble
+    val outFile = args(11)
+    val host = args(12)
     val fn = new FileWriter(outFile)
 
     val stdNoise = DoubleFunctions.sqrt(0.1)
@@ -121,64 +123,86 @@ object TestAlgorithm {
     val sc = new SparkContext(host, "testing")
     val rddSet: RDD[ReutersSet] = sc.parallelize(data.dataSet(nSplits),nSplits)
 
-    val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter)
+    //get general stats on the data here
 
-    val wtrue = data.parameter
-    val vtrue = data.offset
 
-    val wEst = xEst.viewPart(1,n)
-    val vEst = xEst.getQuick(0)
+    //solve
+    solveAndGetStat(rho,lambda,maxIter,absTol,relTol)
 
-    val bEst = data.matrix.zMult(wEst,null).assign(DoubleFunctions.plus(vEst)).assign(DoubleFunctions.sign).assign(DoubleFunctions.plus(1.0)).assign(DoubleFunctions.div(2.0))
 
-    //TODO difference between wEst, vEst and
 
-    val diffParam = algebra.norm2(wtrue.assign(wEst,DoubleFunctions.minus))
-    val diffOffset = vtrue - vEst
+    def solveAndGetStat(rho:Double,lambda:Double,maxIter:Int,absTol:Double,relTol:Double) {
+      fn.write("absTol = " + absTol + "\n")
+      fn.write("relTol = " + relTol + "\n")
 
-    //calculate predictions
-    //see if the classifier does well
-    val bEquals = bEst.copy()
-    bEquals.assign(data.bNoise,DoubleFunctions.equals)
-//    fn.write("bEquals\n")
-//    bEquals.toArray().foreach(b=> fn.write(b.toString + "\n" ))
-    val totalSuccess = bEquals.zSum() / m
+      val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter,absTol,relTol,fn)
 
-    val newbPos = bEst.toArray().zip(data.bNoise.toArray()).filter(_._2 == 1).map(_._1)
-    var nbPos = 0
-    newbPos.foreach(b=> b match {
-      case 1 => {nbPos+=1}
-      case _ => {}
-    })
-    fn.write("original number of positive\n")
-    fn.write(newbPos.size.toString + "\n")
-    val positiveSuccess = (1.0*nbPos)/newbPos.size
+      val wtrue = data.parameter
+      val vtrue = data.offset
 
-    val newbNeg = bEst.toArray().zip(data.bNoise.toArray()).filter(_._2 == 0).map(_._1)
-    var nbNeg = 0
-    newbNeg.foreach(b=> {b match {
-      case 0 => {nbNeg+=1}
-      case _ => {}
-    }})
-    fn.write("original number of negative" + "\n")
-    fn.write(newbNeg.size.toString + "\n")
-    val negativeSuccess = (1.0*nbNeg)/newbNeg.size
+      val wEst = xEst.viewPart(1, n)
+      val vEst = xEst.getQuick(0)
 
-    fn.write("---------------------------------------------------------"+ "\n")
-    fn.write("wEst\n")
-    wEst.toArray().foreach(w=> fn.write(w.toString + "\n" ))
-    fn.write("norm 2 of difference between wTrue and wEst"+ "\n")
-    fn.write(diffParam.toString+ "\n")
-    fn.write("difference between vTrue and vEst"+ "\n")
-    fn.write(diffOffset.toString+ "\n")
-    fn.write("total Success Rate"+ "\n")
-    fn.write(totalSuccess.toString+ "\n")
-    fn.write("positive success rate"+ "\n")
-    fn.write(positiveSuccess.toString+ "\n")
-    fn.write("negative success rate"+ "\n")
-    fn.write(negativeSuccess.toString+ "\n")
-    fn.close()
-    sc.stop()
+      val bEst = data.matrix.zMult(wEst, null).assign(DoubleFunctions.plus(vEst)).assign(DoubleFunctions.sign).assign(DoubleFunctions.plus(1.0)).assign(DoubleFunctions.div(2.0))
+
+      //TODO difference between wEst, vEst and
+
+      val diffParam = algebra.norm2(wtrue.assign(wEst, DoubleFunctions.minus))
+      val diffOffset = vtrue - vEst
+
+      //calculate predictions
+      //see if the classifier does well
+      val bEquals = bEst.copy()
+      bEquals.assign(data.bNoise, DoubleFunctions.equals)
+      //    fn.write("bEquals\n")
+      //    bEquals.toArray().foreach(b=> fn.write(b.toString + "\n" ))
+      val totalSuccess = bEquals.zSum() / m
+
+      val newbPos = bEst.toArray().zip(data.bNoise.toArray()).filter(_._2 == 1).map(_._1)
+      var nbPos = 0
+      newbPos.foreach(b => b match {
+        case 1 => {
+          nbPos += 1
+        }
+        case _ => {}
+      })
+      fn.write("original number of positive\n")
+      fn.write(newbPos.size.toString + "\n")
+      val positiveSuccess = (1.0 * nbPos) / newbPos.size
+
+      val newbNeg = bEst.toArray().zip(data.bNoise.toArray()).filter(_._2 == 0).map(_._1)
+      var nbNeg = 0
+      newbNeg.foreach(b => {
+        b match {
+          case 0 => {
+            nbNeg += 1
+          }
+          case _ => {}
+        }
+      })
+      fn.write("original number of negative" + "\n")
+      fn.write(newbNeg.size.toString + "\n")
+      val negativeSuccess = (1.0 * nbNeg) / newbNeg.size
+
+      fn.write("\n")
+      fn.write("specific statistics to this test\n")
+      /*
+      fn.write("wEst\n")
+      wEst.toArray().foreach(w => fn.write(w.toString + "\n"))
+      */
+      fn.write("norm 2 of difference between wTrue and wEst" + "\n")
+      fn.write(diffParam.toString + "\n")
+      fn.write("difference between vTrue and vEst" + "\n")
+      fn.write(diffOffset.toString + "\n")
+      fn.write("total Success Rate" + "\n")
+      fn.write(totalSuccess.toString + "\n")
+      fn.write("positive success rate" + "\n")
+      fn.write(positiveSuccess.toString + "\n")
+      fn.write("negative success rate" + "\n")
+      fn.write(negativeSuccess.toString + "\n")
+      fn.close()
+      sc.stop()
+    }
   }
 
 }
