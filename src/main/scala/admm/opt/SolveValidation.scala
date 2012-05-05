@@ -2,13 +2,13 @@ package admm.opt
 
 
 import cern.jet.math.tdouble.DoubleFunctions
-import spark.{RDD, SparkContext}
-import admm.data.ReutersData._
+import spark.RDD
 import SLRSparkImmutable.{solve}
-import admm.data.ReutersData
-import cern.colt.matrix.tdouble.{DoubleMatrix1D, DoubleMatrix2D, DoubleFactory1D}
+import cern.colt.matrix.tdouble.{DoubleMatrix1D, DoubleMatrix2D}
 import collection.immutable.HashMap
 import admm.util.ListHelper.list2helper
+import admm.stats.SuccessRate.successRate
+import admm.data.ReutersData.ReutersSet
 
 
 /**
@@ -20,78 +20,62 @@ import admm.util.ListHelper.list2helper
  */
 
 
-case class ReutersSetID(_samples: DoubleMatrix2D, _outputs: DoubleMatrix1D, id: Int) extends ReutersSet {
+class ReutersSetID(_samples: DoubleMatrix2D, _outputs: DoubleMatrix1D, _id: Int) extends ReutersSet {
   def samples = _samples
   def outputs(i: Int) = _outputs
+  def id = _id
+}
+
+object ReutersSetID {
+  def toIdSet(rs: ReutersSet) = {
+    val id = scala.util.Random.nextInt(10000000)
+    new ReutersSetID(rs.samples, rs.outputs(0), id)
+  }
+  def rddWithIds(rdd: RDD[ReutersSet]) = {
+    rdd.map(toIdSet(_))
+  }
 }
 
 
 object SolveValidation {
 
-  def kFoldCrossV (rdd: RDD[ReutersSetID], k: Int ) : Double = {
+  def kFoldCrossV (rdd: RDD[ReutersSetID], k: Int ) : DoubleMatrix1D = {
 
-    val ids = rdd.map(_.id).toArray()
-    val nSlices = ids.size
-    val slicesPerK = nSlices / k
-    val pairs = ids.toList.chunk(slicesPerK).zipWithIndex.map{
-      case (sIds, kId) => {
-        sIds.toTraversable.map{
-          sId => (sId, kId)
-        }
+
+    val kMap = {
+      val nSlices = rdd.count().toInt
+      val pairs = rdd.map(_.id).toArray().toList.chunk(nSlices / k).zipWithIndex.map{
+        case (a,b) => (b,a)
       }
-    }.flatten
-    val map = HashMap(pairs)
-
-
-
-    // s is the percentage of error
-    val s = DoubleFactory1D.sparse.make(1)
-
-    for (i <- 1 to k) {
-
-      val rddTrain = rdd.filter(_.id != i)
-      val rddValid = rdd.filter(_.id == i)
-
-      val zSol = solve(rddTrain.asInstanceOf[RDD[ReutersSet]])
-
-      s.assign(
-        rddValid.map( ls => {
-          val A = ls.samples
-          val b = ls.outputs
-          val m = A.rows()
-          val n = A.columns()
-          
-          val y = DoubleFactory1D.sparse.make(m)
-          A.zMult(zSol.viewPart(1,n),y)
-          y.assign(DoubleFunctions.greater(0)).assign(b, DoubleFunctions.minus).assign(DoubleFunctions.abs)
-          val diff = (y.zSum()).assign(DoubleFunctions.div(m))
-          diff
-        }
-        ).reduce(
-          (a, b) => {
-            a.assign(b, DoubleFunctions.plus)
-            a
-          }), DoubleFunctions.plus)
+      HashMap(pairs: _*)
     }
 
-    s.assign(DoubleFunctions.div(k))
+    val slnAndWeights = (0 until k).map{  kId =>
+      val kSlices = kMap.get(kId).get
 
-    println("s")
-    println(s)
+      val rddTrain = rdd.filter(slice => kSlices.contains(slice.id))
+      val rddValid = rdd.filter(slice => !kSlices.contains(slice.id))
+
+      val zSol = solve(rddTrain.asInstanceOf[RDD[ReutersSet]])
+      val sr = {
+        val tuple = successRate(rddValid.asInstanceOf[RDD[ReutersSet]], Some(zSol))
+        val total = tuple._2 + tuple._4
+        val right = total - tuple._1 + tuple._3
+        right.toDouble / total
+      }
+      (zSol, sr)
+    }.toArray
+
+    val totalWeight = {
+      val weights = slnAndWeights.map(_._2)
+      weights.reduce(_+_)
+    }
+
+    slnAndWeights
+      .map{
+      case (a,b) => {
+        a.copy().assign(DoubleFunctions.mult(b / totalWeight))
+      }
+    }.reduce{ (a,b) => a.copy().assign(b, DoubleFunctions.plus)}
   }
-
-  def main(args: Array[String]) {
-    val host = args(0)
-    val nDocs = args(1).toInt
-    val nFeatures = args(2).toInt
-    val nSplits = args(3).toInt
-    val topicIndex = args(4).toInt
-    val K = args(5).toInt
-    val hdfsPath = "/root/persistent-hdfs"
-    val filePath = "/user/root/data"
-    SolveValidation.kFoldCrossV(ReutersData.slicedReutersRDD(new SparkContext(host, "test"),filePath,hdfsPath,nDocs,nFeatures,nSplits,topicIndex),K)
-  }
-
-
-
 }
