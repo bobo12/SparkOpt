@@ -115,7 +115,7 @@ object SLRSparkImmutable {
               helper(t0)
             }
             def descent(x0: DoubleMatrix1D, maxIter: Int): DoubleMatrix1D = {
-              val tol = 1e-4
+              val tol = 1e-3
               var counter = 0
               val store = ArrayBuffer[Double]()
               def helper(xPrev: DoubleMatrix1D): DoubleMatrix1D = {
@@ -136,7 +136,7 @@ object SLRSparkImmutable {
               helper(x0)
             }
 
-            descent(x,10)
+            descent(x,20)
           }
           new LearningEnv(xNew, u, z)
         }
