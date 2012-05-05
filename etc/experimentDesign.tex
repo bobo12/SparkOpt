@@ -1,0 +1,157 @@
+\documentclass[english]{article}
+
+% Différentes options pour la classe :
+% - taille de la fonte    : 10pt, 11pt, 12pt
+% - recto ou recto-verso    : oneside, twoside
+% - stade de développement    : draft, final
+
+% Chargement d'extensions
+\usepackage[latin1]{inputenc}    % Pour utiliser les lettres accentuées
+
+% Informations le titre, le(s) auteur(s), la date
+\title{Experiment design for the Spark ADMM project}
+\date{\today}
+
+% Début du document
+\begin{document}
+
+\maketitle
+
+\section*{Introduction}
+
+In the first section we use synthetic data for our tests because we have control over that. We use basically randomized normal variables to generate these data. First of all, this first set of experiments is meant to certify that our optimization algorithms are working. Second, we can make all of the parameters vary and see the consequences. Also we can test on the efficiency of our algorithms. In the second section we actually test our results on the real data set. Therefore this section is meant to show how well we can learn on the training set (and computing the error by K-fold cross validation). We can keep track of the success rate but other important factors such as for example the cost of the experiment, as we are using Amazon ec2 clustering.
+
+\section{Synthetic data}
+
+\subsection{Base test}
+
+The purpose of the following sequence of tests is to see how well our algorithms are working. First, we need to choose a set of pertinent values. \textit{TODO} : look at the values of these parameters corresponding to our training set.
+
+\paragraph{Basic parameter values}
+
+\begin{itemize}
+\item Number of documents : $m = 10^6$
+\item Number of features : $n = 10^4$
+\item Parameter sparsity : sparsity$(\omega) = 0.1$
+\item Matrix lines sparsity : sparsity$(rows(A)) = 0.01$
+\item Regularization parameter : $\lambda = 0.1 \lambda_{max}$ where $\lambda_{max}$ is the critical value over which the optimal $\omega$ value is $\omega^{\star} = 0$ (actually this is an upper bound, I noted that even when $\lambda = 0.7 \lambda_{max}$ we get an optimal O-valued parameter.
+\item Augmented parameter : $\rho = 1$
+\item Number of slices on which we distribute the algorithm : 5 (or 10, it depends on the money it costs)
+\end{itemize}
+
+\paragraph{One-time everything-monitored experiment}
+
+The first thing to do is to randomly create one matrix $A$ and the sample/feature-explaining parameter $\omega$ with the right dimensions and store this file on the cluster (actually if we can do that we can even increase the dimensions). Then set a big number of "spark" iterations (consider that at the end you get the $p^{\star}$ that minimizes the objective function) $\Rightarrow$ we have the optimal solution. We record and keep track of:
+
+\begin{itemize}
+\item the norm of the primal residual $r^k$ for each iteration
+\item the norm of the dual residual $s^k$ for each iteration 
+\item $\frac{p}{p^{\star}}$ for each iteration (in fact you record $p^k$, and just at the end you divide everything with your final $p$ that you consider as $p^{\star}$
+\end{itemize}
+
+Second, if it is not too costly and if we have time, we can launch 5 or 10 experiments where this time we just record :
+\begin{itemize}
+\item the total, positive and negative success rate for each iteration
+\item the time for each iteration
+\end{itemize}
+Then we average all the results over the experiments and aggregate that in a sweet figure. This way we have an idea on the efficiency of our algorithm and on what to expect on the real data set.
+
+\bigskip
+Last thing, that could be important (I'm going to take care of this and test it) to actually use a stopping criterion for the gradient descent method. I can be wrong but I think that for now we don't have this stopping criteria but just a fixed number of gradient iterations. So then if we have this we could also record the number of gradient iterations at each "BIG" spark iteration.
+
+\subsection{Parameters' effects test}
+
+Use the same parameters values as in the last subsection. The best thing would be that for each parameter's study we do 10 tests and average over these to get the results. But actually I think that if we keep the same sample matrix and the same labels for all the experiments then it should be also fine.
+
+So we want to test the following changes in the problem's parameters (while fixing the other ones):
+\begin{itemize}
+\item number of slices : $1$ to $10$
+\item number of documents : $10^4$ to $10^6$ (for example $10^4$, $5.10^4$, $10^5$, $5.10^5$ and $10^6$.
+\item number of features : $10^2$ to $10^4$ (same type of sequence)
+\item proportion of positive events (something like $0.5\%$, $1\%$, $5\%$, $20\%$ and $50\%$). Note that for this experiment we actually need to change the $A$ matrix and $b$ vector.
+\item sparsity of A : $\left\lbrace 0.01, 0.05, 0.1, 0.5, 1 \right\rbrace$
+\item sparsity of $\omega$ : idem
+\item $\lambda$ : $0.01 \lambda_{max}, 0.1 \lambda_{max}, 0.5 \lambda_{max}$
+\item $\rho$ : $0.01, 0.1, 0.5, 1$
+\end{itemize}
+
+For each time we measure the performance, for the same fixed number of iterations by : total success rate, positive and negative success rates. We can also count the number of iterations to achieve the stopping criteria (that we also have to set, I can have a look and try to take care of that.)
+
+\subsection{Cross-validation section}
+
+Idea : could be used to find the best values of :
+\begin{itemize}
+\item our $\alpha$ parameter
+\item $\rho$
+\item $\lambda$ (even if I'm not that sure that we have to optimize this parameter)
+\end{itemize}
+
+\subsection{Rare event problem}
+
+I still don't really know what to do about that. I've read a paper that proposes two corrections at the end but I'm not sure we will be able to do that. I'll try to read the part that talks about that again.
+
+\subsection{The "if-we-have-time section"}
+
+Some ideas :
+\begin{itemize}
+\item try SVM instead of logistic regression and compare performances
+\item other ideas?
+\end{itemize}
+
+\section{Real data set}
+
+\paragraph{Compute some critical values}
+
+Recall that we always use our algorithm on just one topic. We could try things on several topics though. The first thing to do would be to compute and record : 
+\begin{itemize}
+\item the actual sparsity of $A$ the sample matrix
+\item the actual rare events proportion (proportion of $1$'s in the labels)
+\item $\lambda_{max}$
+\end{itemize}
+All these things are easy to compute.
+
+\bigskip
+\paragraph{set some values}
+Use cross-validation (?) to set optimal $\alpha$ and $\rho$ values, but also the number of slices (for that there is a tradeoff cost/precision)
+
+\paragraph{Other tests}
+\begin{itemize}
+\item try to duplicate positive events to achieve higher rare events proportions and then look at the actual results (not overcounting the positive successes)
+\item see until what number of documents/features we manage to have results, (if we could do the entire training set that would be great)
+\item Keep track of the costs of the experiments (i.e just the time it lasted and the number of machines, this is enough to compute the cost)
+\end{itemize}
+
+\paragraph{Record the error on our "best shot"}
+List the results and hopefully they look good!
+
+\section*{Conclusion}
+
+To be filled
+
+%    \chapter*{Introduction}
+%    \addcontentsline{toc}{chapter}{Introduction}
+%
+%    \part{Une partie}
+%    \chapter{Un chapitre}
+%    \section{Une section}
+%    \subsection{Une sous-section}
+%    \subsubsection{Une sous-sous-section}
+%    \paragraph{Une sous-sous-sous-sous-section}
+%    \subparagraph{Une sous-sous-sous-sous-sous-section}
+
+%    % Les annexes
+%    \appendix
+%
+%    \chapter{Premier annexe}
+%    \chapter{Second annexe}
+%
+%    \chapter*{Conclusion et discussion}
+%    \addcontentsline{toc}{chapter}{Conclusion et discussion}
+%
+%    % Les différentes tables
+%    \tableofcontents    % Table des matières
+%    \listoffigures        % Liste des figures
+%    \listoftables        % Liste des tableaux
+
+% Fin du document
+\end{document}
