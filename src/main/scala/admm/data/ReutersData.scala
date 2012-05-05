@@ -66,10 +66,7 @@ object ReutersData {
     def generateReutersSet(topicId: TopicId) = (samples, outputs(topicId))
   }
 
-  trait ReutersSetID extends ReutersSet  {
-    def id : Int
-    def generateReutersSetID(topicId: TopicId, id: Int ) = (samples, outputs(topicId) , id )
-  }
+
 
   class UntaggedReutersSet(records: scala.Seq[UntaggedRecord], n: Int) extends ReutersSet with Serializable {
     val m = records.size

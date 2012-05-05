@@ -2,11 +2,13 @@ package admm.opt
 
 
 import cern.jet.math.tdouble.DoubleFunctions
-import cern.colt.matrix.tdouble.{ DoubleFactory1D}
 import spark.{RDD, SparkContext}
 import admm.data.ReutersData._
 import SLRSparkImmutable.{solve}
 import admm.data.ReutersData
+import cern.colt.matrix.tdouble.{DoubleMatrix1D, DoubleMatrix2D, DoubleFactory1D}
+import collection.immutable.HashMap
+import admm.util.ListHelper.list2helper
 
 
 /**
@@ -18,19 +20,39 @@ import admm.data.ReutersData
  */
 
 
+case class ReutersSetID(_samples: DoubleMatrix2D, _outputs: DoubleMatrix1D, id: Int) extends ReutersSet {
+  def samples = _samples
+  def outputs(i: Int) = _outputs
+}
+
+
 object SolveValidation {
 
-  def kFoldCrossV (rdd: RDD[ReutersSetID], K: Int ) : Double = {
+  def kFoldCrossV (rdd: RDD[ReutersSetID], k: Int ) : Double = {
+
+    val ids = rdd.map(_.id).toArray()
+    val nSlices = ids.size
+    val slicesPerK = nSlices / k
+    val pairs = ids.toList.chunk(slicesPerK).zipWithIndex.map{
+      case (sIds, kId) => {
+        sIds.toTraversable.map{
+          sId => (sId, kId)
+        }
+      }
+    }.flatten
+    val map = HashMap(pairs)
+
+
 
     // s is the percentage of error
     val s = DoubleFactory1D.sparse.make(1)
 
-    for (i <- 1 to K) {
+    for (i <- 1 to k) {
 
-      val rddTrain = rdd.filter(ls => ls.id != i)
-      val rddValid = rdd.filter(ls => ls.id == i)
+      val rddTrain = rdd.filter(_.id != i)
+      val rddValid = rdd.filter(_.id == i)
 
-      val zSol = solve(rddTrain)
+      val zSol = solve(rddTrain.asInstanceOf[RDD[ReutersSet]])
 
       s.assign(
         rddValid.map( ls => {
@@ -52,7 +74,7 @@ object SolveValidation {
           }), DoubleFunctions.plus)
     }
 
-    s.assign(DoubleFunctions.div(K))
+    s.assign(DoubleFunctions.div(k))
 
     println("s")
     println(s)
