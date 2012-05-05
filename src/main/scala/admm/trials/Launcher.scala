@@ -4,6 +4,7 @@ import collection.immutable.HashMap
 import spark.SparkContext
 import admm.stats.SuccessRate.successRate
 import admm.data.ParallelizedSyntheticData.generate_data
+import admm.opt.ReutersSetID
 
 /**
  * User: jdr
@@ -13,7 +14,11 @@ import admm.data.ParallelizedSyntheticData.generate_data
 
 object Launcher {
 
-  val launchMap = HashMap(1 -> sparseTrial _, 2-> localTest _)
+  val launchMap = HashMap(
+    1 -> sparseTrial _,
+    2-> localTest _,
+    3 -> kFoldTest _
+  )
   var sc: SparkContext = null
 
   def sparseTrial(args: Array[String]) {
@@ -37,6 +42,10 @@ object Launcher {
   def localTest(args: Array[String]) {
     val data = generate_data(sc, 5000, 100, 10, .5, .5)
     println(successRate(data))
+  }
+
+  def kFoldTest(args: Array[String]) {
+    admm.opt.SolveValidation.kFoldCrossV(ReutersSetID.rddWithIds(generate_data(sc, 1000, 100, 10, .5,.5)).cache(), 2)
   }
 
 
