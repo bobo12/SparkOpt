@@ -22,7 +22,20 @@ object SLRSparkImmutable {
   var lambda = 0.01
   var nIters = 10
   var topicId = 0
+
+
+
   def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters) =  {
+
+    object Cache {
+      var prevZ: Option[DoubleMatrix1D] = None
+      var curZ: Option[DoubleMatrix1D] =  None
+      def stashZ(newZ:DoubleMatrix1D) {
+        prevZ = curZ
+        curZ = Some(newZ)
+      }
+    }
+
     val nSlices = rdd.count() // needed on master machine only
 
     class DataEnv(samples: DoubleMatrix2D, outputs: DoubleMatrix1D) extends Serializable {
@@ -173,8 +186,16 @@ object SLRSparkImmutable {
     }
 
     def stopLearning(rdd: RDD[DataEnv#LearningEnv]): Boolean = {
-      Cache.curZ // can do stuff with cache!
-      false
+      Cache.prevZ match {
+        case None => {
+          // there is no prevZ so can't do anything!
+          false
+        }
+        case _ => {
+          // this is where you would really do stuff
+          false
+        }
+      }
     }
 
     def iterate[A](updateFn: A => A, stopFn: A => Boolean, init: A , maxIter: Int) = {
@@ -195,14 +216,7 @@ object SLRSparkImmutable {
       .map(_.initLearningEnv)
       .cache()
 
-    object Cache {
-      var prevZ: DoubleMatrix1D = null
-      var curZ: DoubleMatrix1D =  learningEnvs.take(1).head.z.copy()
-      def stashZ(newZ:DoubleMatrix1D) {
-        prevZ = curZ
-        curZ = newZ
-      }
-    }
+
 
     iterate(updateSet,
       stopLearning,
