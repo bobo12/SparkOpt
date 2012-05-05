@@ -4,3 +4,6 @@ out/
 *pyc
 .idea_modules/
 target/
+#*
+*#
+src/main/scala/admm/test/Playground.scala
