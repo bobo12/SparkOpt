@@ -27,6 +27,8 @@ object SLRSparkImmutable {
 
   def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters) =  {
 
+    var algebra = new DenseDoubleAlgebra()
+
     object Cache {
       var prevZ: Option[DoubleMatrix1D] = None
       var curZ: Option[DoubleMatrix1D] =  None
@@ -41,7 +43,7 @@ object SLRSparkImmutable {
     class DataEnv(samples: DoubleMatrix2D, outputs: DoubleMatrix1D) extends Serializable {
       val rho = _rho
       val lambda = _lambda
-      val algebra = new DenseDoubleAlgebra()
+      var algebra = new DenseDoubleAlgebra()
       val C = {
         val bPrime = outputs.copy()
         bPrime.assign(DoubleFunctions.mult(2.0)).assign(DoubleFunctions.minus(1.0))
@@ -83,9 +85,9 @@ object SLRSparkImmutable {
 
               val normTerm = math
                 .pow(algebra.norm2(x
-                  .copy()
-                  .assign(z, DoubleFunctions.minus)
-                  .assign(u, DoubleFunctions.plus)),
+                .copy()
+                .assign(z, DoubleFunctions.minus)
+                .assign(u, DoubleFunctions.plus)),
                 2) * rho /2.0
 
               expTerm + normTerm
@@ -113,7 +115,7 @@ object SLRSparkImmutable {
               helper(t0)
             }
             def descent(x0: DoubleMatrix1D, maxIter: Int): DoubleMatrix1D = {
-              val tol = 1e-4
+              val tol = 1e-3
               var counter = 0
               val store = ArrayBuffer[Double]()
               def helper(xPrev: DoubleMatrix1D): DoubleMatrix1D = {
@@ -134,7 +136,7 @@ object SLRSparkImmutable {
               helper(x0)
             }
 
-            descent(x,100)
+            descent(x,20)
           }
           new LearningEnv(xNew, u, z)
         }
@@ -150,6 +152,16 @@ object SLRSparkImmutable {
         def zUpdateEnv(newZ: DoubleMatrix1D) = {
           new LearningEnv(x, u, newZ)
         }
+        def xNorm() : Double = {
+          algebra.norm2(x)
+        }
+        def uNorm() : Double = {
+          algebra.norm2(u)
+        }
+        def primalResidual : Double = {
+          algebra.norm2(x.copy().assign(z,DoubleFunctions.minus))
+        }
+
       }
       def initLearningEnv = {
         new LearningEnv(DoubleFactory1D.sparse.make(n + 1),DoubleFactory1D.sparse.make(n + 1), DoubleFactory1D.sparse.make(n+1))
@@ -157,6 +169,7 @@ object SLRSparkImmutable {
     }
 
     def updateSet(oldSet: RDD[DataEnv#LearningEnv]) = {
+
       val xLS = oldSet
         .map(_.xUpdateEnv)
         .cache()
@@ -185,17 +198,48 @@ object SLRSparkImmutable {
         .cache()
     }
 
+    val absTol = 0.0001//this should be tuned
+    val relTol = 0.01//tuning less important because it's a relative value
+
+    /*
+    Returns true iff the stopping criteria is met (just the primal residual now)
+    TODO : calculate the dual residual (it is more difficult though because it's between z and zold
+     */
     def stopLearning(rdd: RDD[DataEnv#LearningEnv]): Boolean = {
-      Cache.prevZ match {
-        case None => {
-          // there is no prevZ so can't do anything!
-          false
-        }
-        case _ => {
-          // this is where you would really do stuff
-          false
+      val primalResidual = rdd
+        .map(ls => ls.primalResidual)
+        .reduce(_+_)
+      println("primal residual " + primalResidual)
+
+      //compute primal residual
+      val xNorm = rdd.map(ls => ls.xNorm()).reduce(_+_)
+      println("x norm " + xNorm)
+      val zNorm = algebra.norm2(Cache.curZ.get)
+      println("z norm " + zNorm)
+      //this is just to take care of the case where the last slice does not have the same sample size
+      val avNbSamples = rdd.map(ls => ls.x.size).reduce(_+_) / nSlices.toDouble
+      //epsPrimal computation uses same formula as Boyd's 3.3.1
+      val epsPrimal = math.sqrt((avNbSamples+1)*nSlices)*absTol + relTol * math.max(xNorm,zNorm)
+      println("primal epsilon " + epsPrimal)
+
+      val uNorm = rdd.map(ls=>ls.uNorm()).reduce(_+_)
+      val epsDual = math.sqrt(avNbSamples)*absTol+relTol*rho*uNorm
+      //compute dualResidual
+      var retour = false
+      if(epsPrimal>primalResidual) {
+        retour = Cache.prevZ match {
+          case None => {
+            // there is no prevZ so can't do anything!
+            false
+          }
+          case _ => {
+            val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
+            if(epsDual>dualResidual) true
+            else false
+          }
         }
       }
+      retour
     }
 
     def iterate[A](updateFn: A => A, stopFn: A => Boolean, init: A , maxIter: Int) = {
@@ -216,6 +260,7 @@ object SLRSparkImmutable {
       .map(_.initLearningEnv)
       .cache()
 
+    //we don't want to try the termination criteria before the first update
     val firstStep = updateSet(learningEnvs)
 
 
@@ -229,3 +274,4 @@ object SLRSparkImmutable {
   }
 
 }
+

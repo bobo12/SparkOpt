@@ -35,8 +35,9 @@ object TestAlgorithm {
 
   class BaseLineDataSet(A:DoubleMatrix2D, w:DoubleMatrix1D,  v:Double, noise: DoubleMatrix1D){
     val aux = A.zMult(w,null).assign(DoubleFunctions.plus(v))
-    val bTrue = aux.copy().assign(DoubleFunctions.sign).assign(DoubleFunctions.plus(1.0)).assign(DoubleFunctions.div(2.0))
-    val bNoise = aux.copy().assign(noise,DoubleFunctions.plus).assign(DoubleFunctions.sign).assign(DoubleFunctions.plus(1.0)).assign(DoubleFunctions.div(2.0))
+    val bTrue = aux.copy().assign(DoubleFunctions.greater(0))
+    val bNoise = aux.copy().assign(noise,DoubleFunctions.plus).assign(DoubleFunctions.greater(0))
+
     def dataSet(implicit nSlices: Int = 1) = {
       val chunkSize = A.rows() / nSlices
       val splitA = A.toArray.toList.chunk(chunkSize)
@@ -100,6 +101,7 @@ object TestAlgorithm {
     bTilde.assign(
       bTilde.toArray().map(
         bi => {
+          println(bi)
           bi match {
             case 1=> {negProportion}
             case 0=> {-posProportion}
