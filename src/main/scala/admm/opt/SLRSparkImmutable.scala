@@ -39,7 +39,7 @@ object SLRSparkImmutable {
     class DataEnv(samples: DoubleMatrix2D, outputs: DoubleMatrix1D) extends Serializable {
       val rho = _rho
       val lambda = _lambda
-      val algebra = new DenseDoubleAlgebra()
+      var algebra = new DenseDoubleAlgebra()
       val C = {
         val bPrime = outputs.copy()
         bPrime.assign(DoubleFunctions.mult(2.0)).assign(DoubleFunctions.minus(1.0))
@@ -81,9 +81,9 @@ object SLRSparkImmutable {
 
               val normTerm = math
                 .pow(algebra.norm2(x
-                  .copy()
-                  .assign(z, DoubleFunctions.minus)
-                  .assign(u, DoubleFunctions.plus)),
+                .copy()
+                .assign(z, DoubleFunctions.minus)
+                .assign(u, DoubleFunctions.plus)),
                 2) * rho /2.0
 
               expTerm + normTerm
@@ -146,6 +146,19 @@ object SLRSparkImmutable {
         def zUpdateEnv(newZ: DoubleMatrix1D) = {
           new LearningEnv(x, u, newZ)
         }
+        def xNorm() : Double = {
+          println(algebra.norm2(x))
+          algebra.norm2(x)
+        }
+        /*def zNorm() : Double = {
+          println(algebra.norm2(z))
+          algebra.norm2(z)
+        }*/
+        def primalResidual : Double = {
+          println(algebra.norm2(x.copy().assign(z,DoubleFunctions.minus)))
+          algebra.norm2(x.copy().assign(z,DoubleFunctions.minus))
+        }
+
       }
       def initLearningEnv = {
         new LearningEnv(DoubleFactory1D.sparse.make(n + 1),DoubleFactory1D.sparse.make(n + 1), DoubleFactory1D.sparse.make(n+1))
@@ -153,6 +166,9 @@ object SLRSparkImmutable {
     }
 
     def updateSet(oldSet: RDD[DataEnv#LearningEnv]) = {
+
+      val oldZ = oldSet.take(1)(0).z
+
       val xLS = oldSet
         .map(_.xUpdateEnv)
         .cache()
@@ -180,8 +196,40 @@ object SLRSparkImmutable {
         .cache()
     }
 
+    val absTol = 0.0001//this should be tuned
+    val relTol = 0.01//tuning less important because it's a relative value
+
+    /*
+    Returns true iff the stopping criteria is met (just the primal residual now)
+    TODO : calculate the dual residual (it is more difficult though because it's between z and zold
+     */
     def stopLearning(rdd: RDD[DataEnv#LearningEnv]): Boolean = {
-      false
+      val primalResidual = rdd
+        .map(ls => ls.primalResidual)
+        .reduce(_+_)
+      println(primalResidual)
+
+      val xNorm = rdd.map(ls => ls.xNorm()).reduce(_+_)
+      println(xNorm)
+      val zNorm = rdd.map(ls => ls.zNorm()).reduce(_+_)
+      println(zNorm)
+      val avNbSamples = rdd.map(ls => ls.x.size).reduce(_+_) / nSlices.toDouble
+      println(avNbSamples)
+      //epsPrimal computation uses same formula as Boyd's 3.3.1
+      val epsPrimal = math.sqrt((avNbSamples+1)*nSlices)*absTol + relTol * math.max(xNorm,zNorm)
+      println(epsPrimal)
+
+      //compute dualResidual
+
+      println("stopLearning")
+      if (primalResidual<epsPrimal) {
+        println("true")
+        true
+      }
+      else {
+        println("false")
+        false
+      }
     }
 
 
@@ -199,3 +247,4 @@ object SLRSparkImmutable {
   }
 
 }
+
