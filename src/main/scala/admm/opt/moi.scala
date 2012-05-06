@@ -1,6 +1,7 @@
 package admm.opt
 
 import scala.util.Random
+import admm.trials.Launcher
 
 /**
  * Created by IntelliJ IDEA.
@@ -13,6 +14,5 @@ import scala.util.Random
 object moi extends App {
 
   val r = new Random().nextInt(3)
-  
   println(r)
 }
