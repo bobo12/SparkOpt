@@ -25,10 +25,10 @@ object SLRSparkImmutable {
   var relTol = 0.01//tuning less important because it's a relative value
 
   def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters,
-             _absTol: Double = SLRSparkImmutable.absTol, _relTol: Double = SLRSparkImmutable.relTol,
-             fn:FileWriter = new FileWriter("outFile")) =  {
+             _absTol: Double = SLRSparkImmutable.absTol, _relTol: Double = SLRSparkImmutable.relTol) =  {
     
     var algebra = new DenseDoubleAlgebra()
+    val stats = new StatTracker
 
     object Cache {
       var prevZ: Option[DoubleMatrix1D] = None
