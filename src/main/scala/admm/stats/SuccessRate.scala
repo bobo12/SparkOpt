@@ -38,7 +38,11 @@ object SuccessRate {
           val posA = aArr.zipWithIndex.filter{ case (a,ind) => posInd.contains(ind)}.map(_._1)
           val negA = aArr.zipWithIndex.filter{ case (a,ind) => negInd.contains(ind)}.map(_._1)
 
-          val posFail = DoubleFactory2D.sparse.make(posA)
+          val posFail =
+            posA.size match {
+              case 0 => 0
+              case _ => {
+            DoubleFactory2D.sparse.make(posA)
             .zMult(w, null)
             .assign(DoubleFunctions.plus(v))
             .assign(DoubleFunctions.sign)
@@ -47,15 +51,23 @@ object SuccessRate {
             .assign(DoubleFactory1D.sparse.make(posB), DoubleFunctions.minus)
             .assign(DoubleFunctions.abs)
             .zSum().toInt
-          val negFail = DoubleFactory2D.sparse.make(negA)
-            .zMult(w, null)
-            .assign(DoubleFunctions.plus(v))
-            .assign(DoubleFunctions.sign)
-            .assign(DoubleFunctions.plus(1.0))
-            .assign(DoubleFunctions.div(2.0))
-            .assign(DoubleFactory1D.sparse.make(negB), DoubleFunctions.minus)
-            .assign(DoubleFunctions.abs)
-            .zSum().toInt
+              }
+            }
+          val negFail =
+          negA.size match {
+            case 0 => 0
+            case _ => {
+              DoubleFactory2D.sparse.make(negA)
+                .zMult(w, null)
+                .assign(DoubleFunctions.plus(v))
+                .assign(DoubleFunctions.sign)
+                .assign(DoubleFunctions.plus(1.0))
+                .assign(DoubleFunctions.div(2.0))
+                .assign(DoubleFactory1D.sparse.make(negB), DoubleFunctions.minus)
+                .assign(DoubleFunctions.abs)
+                .zSum().toInt
+            }
+          }
           (posFail, nPos, negFail, nNeg)
         }).reduce((a,b) => (a._1 + b._1,a._2 + b._2,a._3 + b._3,a._4 + b._4))
       }
