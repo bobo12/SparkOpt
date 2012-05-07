@@ -12,6 +12,8 @@ import cern.colt.matrix.tdouble.{DoubleFactory1D, DoubleFactory2D, DoubleMatrix1
 import java.io.FileWriter
 import admm.opt.SolveValidation
 import admm.opt.ReutersSetID
+import admm.data.ParallelizedSyntheticData
+import admm.stats.SuccessRate
 
 /**
  * Created by IntelliJ IDEA.
@@ -23,7 +25,7 @@ import admm.opt.ReutersSetID
 
 object KFoldValidation {
 
-  class TestSet(aMatrix: DoubleMatrix2D, bVector: DoubleMatrix1D) extends ReutersSet with Serializable{
+  /*class TestSet(aMatrix: DoubleMatrix2D, bVector: DoubleMatrix1D) extends ReutersSet with Serializable{
     val samples = aMatrix
     def outputs(topicId: ReutersData.TopicId) = {
       if (topicId!=0) {
@@ -60,7 +62,7 @@ object KFoldValidation {
     @param noiseStd : standard deviation of the noise that we add to the true label vector A*w + v
     @returns a BaseLineDataSet
    */
-  def createData(m :Int, n:Int, sparsityA : Double, sparsityW : Double, noiseStd : Double) : BaseLineDataSet =  {
+ /* def createData(m :Int, n:Int, sparsityA : Double, sparsityW : Double, noiseStd : Double) : BaseLineDataSet =  {
     val w = ADMMFunctions.sprandnvec(n,sparsityW)
     //val v = Random.nextGaussian()
     val v = 0
@@ -68,7 +70,7 @@ object KFoldValidation {
     //noise
     val noise = ADMMFunctions.sprandnvec(m,1.0).assign(DoubleFunctions.mult(noiseStd))
     new BaseLineDataSet(A,w,v,noise)
-  }
+  }  */
 
   def main(args: Array[String]) {
     val m = args(0).toInt //nbDocs
@@ -89,7 +91,7 @@ object KFoldValidation {
     val fn = new FileWriter(outFile)
     val K = args(13).toInt
 
-    val stdNoise = DoubleFunctions.sqrt(0.1)
+    /*val stdNoise = DoubleFunctions.sqrt(0.1)
     val data = createData(m,n,sparsityA,sparsityW,stdNoise)
 
     //calculate lambda max
@@ -119,11 +121,13 @@ object KFoldValidation {
     val lambdaMax = algebra.normInfinity(At.zMult(bTilde,null))
     println("lmax: " + lambdaMax.toString)
     val lambda = coefflambda * lambdaMax
-    println("lam : " + lambda.toString)
+    println("lam : " + lambda.toString)*/
 
 
     val sc = new SparkContext(host, "testing")
-    val rddSet0: RDD[ReutersSet] = sc.parallelize(data.dataSet(nSplits),nSplits)
+    //val rddSet0: RDD[ReutersSet] = sc.parallelize(data.dataSet(nSplits),nSplits)
+
+    val rddSet0 : RDD[ReutersSet] = generate_data(sc, m , n, nSplits, sparsityA, sparsityW)
     
     val rddSet: RDD[ReutersSetID] = ReutersSetID.rddWithIds(rddSet0)
 
@@ -208,6 +212,6 @@ object KFoldValidation {
       fn.close()
       sc.stop()
     }
-  }
+  }  */
 
 }
