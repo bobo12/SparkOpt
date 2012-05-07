@@ -3,13 +3,11 @@ package admm.opt
 import cern.colt.matrix.tdouble.algo.DenseDoubleAlgebra
 import cern.jet.math.tdouble.DoubleFunctions
 import cern.colt.matrix.tdouble.{DoubleFactory1D, DoubleMatrix1D, DoubleFactory2D, DoubleMatrix2D}
-import scala.util.control.Breaks._
 import admm.util.ADMMFunctions
 import admm.data.ReutersData.ReutersSet
-import admm.data.ReutersData
-import spark.{SparkContext, RDD}
-import java.io.FileWriter
+import spark.RDD
 import collection.mutable.ArrayBuffer
+import admm.stats.StatTracker
 
 /**
  * User: jdr
@@ -63,6 +61,7 @@ object SLRSparkImmutable {
       val m = samples.rows()
       case class LearningEnv(x: DoubleMatrix1D, u: DoubleMatrix1D, z: DoubleMatrix1D) {
         def xUpdateEnv = {
+          stats.iters.head.xTracker.resetIter
           println("update x....")
           val xNew = {
             def gradient(x: DoubleMatrix1D): DoubleMatrix1D = {
@@ -124,21 +123,24 @@ object SLRSparkImmutable {
             def descent(x0: DoubleMatrix1D, maxIter: Int): DoubleMatrix1D = {
               val tol = 1e-3
               var counter = 0
-              val store = ArrayBuffer[Double]()
               def helper(xPrev: DoubleMatrix1D): DoubleMatrix1D = {
                 counter +=1
+                stats.iters.head.xTracker.iters.head.resetIter
                 val grad = gradient(xPrev)
-                store+= algebra.norm2(grad)
+                val norm = algebra.norm2(grad)
+                stats.iters.head.xTracker.iters.head.iters.head.gradientNorm = norm
                 val direction = grad.copy().assign(DoubleFunctions.neg)
                 val t = backtracking(xPrev, direction, grad)
                 val xNext = xPrev.copy().assign(direction, DoubleFunctions.plusMultSecond(t))
-                if (algebra.norm2(grad) < tol || (counter >= maxIter)) {
+                if (norm < tol || (counter >= maxIter)) {
                   println("last iter: " + counter.toString)
-                  println(store)
+                  stats.iters.head.xTracker.iters.head.endIter
+                  stats.iters.head.xTracker.iters.head.stop
                   xNext
                 }
-                else
+                else {
                   helper(xNext)
+                }
               }
               helper(x0)
             }
@@ -149,22 +151,23 @@ object SLRSparkImmutable {
         }
         def uUpdateEnv = {
           println("update u....")
+          stats.iters.head.uTracker.newIter
+          stats.iters.head.uTracker.iters.head.start
           val uNew = {
             val newU = u.copy()
             newU.assign(x,DoubleFunctions.plus).assign(z,DoubleFunctions.minus)
             newU
           }
+          stats.iters.head.uTracker.iters.head.stop
           new LearningEnv(x,uNew, z)
         }
         def zUpdateEnv(newZ: DoubleMatrix1D) = {
           new LearningEnv(x, u, newZ)
         }
-        def xNorm() : Double = {
-          algebra.norm2(x)
-        }
-        def uNorm() : Double = {
-          algebra.norm2(u)
-        }
+
+        def xNorm = algebra.norm2(x)
+        def uNorm = algebra.norm2(u)
+
         def primalResidual : Double = {
           algebra.norm2(x.copy().assign(z,DoubleFunctions.minus))
         }
@@ -176,10 +179,11 @@ object SLRSparkImmutable {
     }
 
     def updateSet(oldSet: RDD[DataEnv#LearningEnv]) = {
-
+      stats.cur.xTracker.start
       val xLS = oldSet
         .map(_.xUpdateEnv)
         .cache()
+      stats.cur.xTracker.stop
 
       val z = {
 
@@ -199,10 +203,13 @@ object SLRSparkImmutable {
         reduced
       }
       Cache.stashZ(z)
-
-      xLS.map(_.zUpdateEnv(z))
+      stats.cur.uTracker.start
+      val uLS = xLS.map(_.zUpdateEnv(z))
         .map(_.uUpdateEnv)
         .cache()
+      stats.cur.uTracker.stop
+      println("x track len: " + stats.iters.head.xTracker.iters.length.toString)
+      uLS
     }
 
     /*
@@ -212,10 +219,10 @@ object SLRSparkImmutable {
       val primalResidual = rdd
         .map(ls => ls.primalResidual)
         .reduce(_+_)
-      println("primal residual " + primalResidual)
+      stats.cur.pRes = primalResidual
 
       //compute primal residual
-      val xNorm = rdd.map(ls => ls.xNorm()).reduce(_+_)
+      val xNorm = rdd.map(ls => ls.xNorm).reduce(_+_)
       println("x norm " + xNorm)
       val zNorm = algebra.norm2(Cache.curZ.get)
       println("z norm " + zNorm)
@@ -223,9 +230,9 @@ object SLRSparkImmutable {
       val avNbSamples = rdd.map(ls => ls.x.size).reduce(_+_) / nSlices.toDouble
       //epsPrimal computation uses same formula as Boyd's 3.3.1
       val epsPrimal = math.sqrt((avNbSamples+1)*nSlices)*absTol + relTol * math.max(xNorm,zNorm)
-      println("primal epsilon " + epsPrimal)
+      stats.cur.pEps = epsPrimal
 
-      val uNorm = rdd.map(ls=>ls.uNorm()).reduce(_+_)
+      val uNorm = rdd.map(ls=>ls.uNorm).reduce(_+_)
       val epsDual = math.sqrt(avNbSamples)*absTol+relTol*rho*uNorm
       //compute dualResidual
       var retour = false
@@ -239,8 +246,8 @@ object SLRSparkImmutable {
           case _ => {
             println("compute dual residual")
             val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
-            println("dual residual " + dualResidual)
-            println("dual epsilon" + epsDual)
+            stats.cur.dEps = epsDual
+            stats.cur.dRes = dualResidual
             if(epsDual>dualResidual) true
             else false
           }
@@ -253,17 +260,11 @@ object SLRSparkImmutable {
       var iter = 0
       def helper(oldValue: A): A = {
         iter+=1
+        stats.resetIter
         (stopFn(oldValue) || (iter > maxIter)) match {
           case true => {
-            println("---------------------------------------------------------------------")
-            println("NUMBER OF ADMM ITERATIONS" + iter)
-            if (iter>maxIter) print("because the maximum number of iterations was attained")
-            println("---------------------------------------------------------------------")
-            fn.write("\n")
-            fn.write("number of ADMM iterations" + iter )
-            if (iter>maxIter) fn.write(" because the maximum number of iterations was attained\n")
-            else fn.write("\n")
-            fn.write("\n")
+            stats.endIter
+            stats.stop
             oldValue
           }
           case _ => helper(updateFn(oldValue))
@@ -279,16 +280,19 @@ object SLRSparkImmutable {
       .cache()
 
     //we don't want to try the termination criteria before the first update
+    stats.resetIter
     val firstStep = updateSet(learningEnvs)
 
 
 
-    iterate(updateSet,
+    val z = iterate(updateSet,
       stopLearning,
       firstStep,
       _nIters)
       .take(1)(0)
       .z
+    println(stats)
+    z
   }
 
 }
