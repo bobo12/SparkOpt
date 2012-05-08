@@ -14,7 +14,7 @@ import admm.opt.ReutersSetID
 
 object Launcher {
 
-  val registeredApps = List(new SparseTrial)
+  val registeredApps = List(new SparseTrial, new KFoldTrial)
   val launchMap = HashMap(registeredApps.map(l => l.launchID -> l): _*)
 
   def main(args: Array[String]) {
