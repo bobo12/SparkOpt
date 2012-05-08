@@ -3,9 +3,9 @@ package admm.test
 import java.io.FileWriter
 import spark.{RDD, SparkContext}
 import admm.data.ReutersData.ReutersSet
-import admm.opt.{SolveValidation, ReutersSetID}
 import admm.data.ParallelizedSyntheticData.{generate_data}
 import admm.stats.SuccessRate.{successRate}
+import admm.opt.{SLRConfig, SolveValidation, ReutersSetID}
 
 /**
  * Created by IntelliJ IDEA.
@@ -30,7 +30,12 @@ object KFoldVal {
 
     val sc = new SparkContext(host, "testing")
 
-    val rddSet = ReutersSetID.rddWithIds(generate_data(sc, m , n, nSplits, sparsityA, sparsityW)).cache() // cqche?
+    val conf = new SLRConfig
+    conf.nDocs = m
+    conf.nFeatures = n
+    conf.nSlices = nSplits
+
+    val rddSet = ReutersSetID.rddWithIds(generate_data(sc, conf, sparsityA, sparsityW)).cache() // cqche?
 
     val zEst = SolveValidation.kFoldCrossV(rddSet, K)
 
