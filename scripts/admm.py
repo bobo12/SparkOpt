@@ -4,6 +4,8 @@ import subprocess
 import boto
 import time
 import os
+from itertools import chain
+from simplejson import load
 
 
 MAIN_DIR = '../'
@@ -140,3 +142,34 @@ def start_cluster():
     run_cmd('./mesos-ec2 start admm')
 def destroy_cluster():
     run_cmd('./mesos-ec2 destroy admm')
+
+def launch_local(launch_id, **kwargs):
+    kw_list = list(chain.from_iterable([map(str,[k,v]) for k,v in kwargs.iteritems()]))
+    run_cmd([
+        'pushd {0}'.format(MAIN_DIR),
+        "sbt 'run-main admm.trials.Launcher local {0} {1}'".format(launch_id, ' '.join(kw_list)),
+        'popd'
+        ])
+
+
+def obj_dic(d):
+    top = type('new', (object,), d)
+    seqs = tuple, list, set, frozenset
+    for i, j in d.items():
+	if isinstance(j, dict):
+	    setattr(top, i, obj_dic(j))
+	elif isinstance(j, seqs):
+	    setattr(top, i, 
+		    type(j)(obj_dic(sj) if isinstance(sj, dict) else sj for sj in j))
+	else:
+	    setattr(top, i, j)
+    return top
+
+def dejunk(lst):
+    return filter(lambda x: x >= 0, lst)
+
+def load_output(fn):
+    json = load(open(fn,'r'))
+    if isinstance(json, list):
+        return [obj_dic(j) for j in json]
+    return obj_dic(json)

@@ -141,7 +141,7 @@ object TestAlgorithm {
       conf.absTol = absTol
       conf.relTol = relTol
 
-      val xEst = SLRSparkImmutable.solve(rddSet, conf)
+      val xEst = SLRSparkImmutable.solve(rddSet, conf).z
 
       val wtrue = data.parameter
       val vtrue = data.offset

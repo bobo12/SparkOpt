@@ -15,4 +15,4 @@ export MESOS_HOME=/root/mesos
 
 # Set Spark's memory per machine -- you might want to increase this
 export SPARK_MEM=2g
-export SPARK_CLASSPATH=/root/SparkOpt/lib/parallelcolt-0.9.4.jar:/root/SparkOpt/lib/jtransforms.jar:/root/SparkOpt/lib/jtransforms-2.4.jar:/root/SparkOpt/target/scala-2.9.1/classes
+export SPARK_CLASSPATH=/root/SparkOpt/lib/parallelcolt-0.9.4.jar:/root/SparkOpt/lib/json.jar:/root/SparkOpt/lib/jtransforms.jar:/root/SparkOpt/lib/jtransforms-2.4.jar:/root/SparkOpt/target/scala-2.9.1/classes

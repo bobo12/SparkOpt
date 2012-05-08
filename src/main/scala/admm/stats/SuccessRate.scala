@@ -16,7 +16,11 @@ object SuccessRate {
 
   def successRate(dataset: RDD[ReutersSet], zValue: Option[DoubleMatrix1D] = None, conf: SLRConfig = new SLRConfig): (Int, Int, Int, Int) = {
     zValue match {
+<<<<<<< HEAD
       case None => successRate(dataset, Some(SLRSparkImmutable.solve(dataset, conf)), conf)
+=======
+     // case None => successRate(dataset, Some(SLRSparkImmutable.solve(dataset, conf).z))
+>>>>>>> d5789793d9c12d6ff17efe87ac6ca3b44aefdf5c
       case Some(est) => {
         val sample = dataset.take(1).head.samples
         val n = sample.columns()

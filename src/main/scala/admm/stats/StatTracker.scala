@@ -1,5 +1,9 @@
 package admm.stats
 import scala.collection.mutable.ListBuffer
+import cern.colt.matrix.tdouble.DoubleMatrix1D
+import collection.immutable.HashMap
+import com.twitter.json.{JsonSerializable, JsonQuoted, Json}
+import admm.opt.SLRConfig
 
 /**
  * User: jdr
@@ -8,7 +12,8 @@ import scala.collection.mutable.ListBuffer
  */
 
 
-class Tracker extends Serializable{
+
+class Tracker extends Serializable with JsonSerializable{
   var startTime = -1L
   var time = -1L
   def start {
@@ -17,7 +22,12 @@ class Tracker extends Serializable{
   def stop {
     time = System.currentTimeMillis() - startTime
   }
-
+  def toJson(): String = {
+    Json.build(jsonMap).toString()
+  }
+  def jsonMap: Map[Any, Any] = {
+    HashMap("time"-> time)
+  }
 }
 
 object Tracker {
@@ -42,6 +52,12 @@ class IterTracker[A<:Tracker](fac: () => A = Tracker.fac _) extends Tracker {
     endIter
     newIter
   }
+  override def jsonMap: Map[Any, Any] = {
+    val map = super.jsonMap
+    val iterMaps = iters.map(_.jsonMap)
+    map + (("iters", iterMaps))
+  }
+
 }
 
 object IterTracker {
@@ -75,6 +91,14 @@ class InnerTracker extends Tracker {
   var pEps = -1.
   var dRes = -1.
   var dEps = -1.
+  var card = -1
+  override def jsonMap = {
+    val map = super.jsonMap
+    val titles = List[String]("time","pres", "peps", "dres", "deps", "card")
+    val values = List(time.toDouble, pRes, pEps, dRes, dEps, card)
+    val zips = HashMap(titles.zip(values): _*)
+    map ++ zips
+  }
 }
 
 object InnerTracker {
@@ -82,21 +106,12 @@ object InnerTracker {
 }
 
 class StatTracker extends IterTracker[InnerTracker](InnerTracker.fac _) {
-  override def toString = {
-    iters.zipWithIndex.map{
-      case (inner, ind) => {
-        val titles = List[String]("time","pres", "peps", "dres", "deps")
-        val values = List(inner.time.toDouble, inner.pRes, inner.pEps, inner.dRes, inner.dEps)
-        val zips = titles.zip(values)
-        val maps = zips.map{
-          case (title, value) => {
-            "%s: %f".format(title, value)
-          }
-        }
-        val combine = maps.toArray.deepMkString("\n")
-        "Inner Loop %d\n%s"
-          .format(ind, combine)
-      }
-    }.toArray.deepMkString("\n")
+  var z: DoubleMatrix1D = null
+  var conf: SLRConfig = null
+  override def jsonMap = {
+    val map = super.jsonMap
+    val zArr = z.toArray
+    val zConf = conf.jsonMap
+    (map + (("z", zArr))) ++ zConf
   }
 }

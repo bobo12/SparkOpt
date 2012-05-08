@@ -8,6 +8,9 @@ import admm.data.ReutersData.ReutersSet
 import spark.RDD
 import collection.mutable.ArrayBuffer
 import admm.stats.StatTracker
+import java.io.FileWriter
+import collection.immutable.HashMap
+import com.twitter.json.{JsonSerializable, Json}
 
 /**
  * User: jdr
@@ -15,7 +18,17 @@ import admm.stats.StatTracker
  * Time: 12:34 PM
  */
 
-class SLRConfig extends Serializable{
+trait SLRWriter {
+  var useOutput = false
+  var outputPath: String = ""
+  def setOutput(fn: String) {
+    outputPath = fn
+    useOutput = true
+  }
+  def getWriter = new FileWriter(outputPath)
+}
+
+class SLRConfig extends Serializable with SLRWriter{
   var rho = 1.0
   var lambda = 0.1
   var nIters = 10
@@ -25,6 +38,26 @@ class SLRConfig extends Serializable{
   var nDocs = 500
   var nFeatures = 100
   var nSlices = 1
+  def jsonMap = {
+    HashMap(List("rho","lambda","nIters","topicId", "absTol","relTol", "nDocs", "nFeatures", "nSlices")
+    .zip(List(rho,lambda, nIters, topicId, absTol, relTol, nDocs, nFeatures, nSlices)): _*)
+  }
+}
+
+class Experiment(rdd: RDD[ReutersSet], confs: Seq[SLRConfig], filePath: String) extends SLRWriter with JsonSerializable {
+  confs.foreach(_.useOutput = false)
+  setOutput(filePath)
+  def solveSet = {
+    confs.map(SLRSparkImmutable.solve(rdd, _))
+  }
+  override def toJson() = {
+    Json.build(solveSet.map(_.jsonMap)).toString()
+  }
+  def serializeSolution {
+    val fn = getWriter
+    fn.write(toJson())
+    fn.close()
+  }
 }
 
 object SLRSparkImmutable {
@@ -41,6 +74,8 @@ object SLRSparkImmutable {
 
     var algebra = new DenseDoubleAlgebra()
     val stats = new StatTracker
+    stats.start
+    stats.conf = conf
 
     object Cache {
       var prevZ: Option[DoubleMatrix1D] = None
@@ -209,6 +244,7 @@ object SLRSparkImmutable {
         reduced
       }
       Cache.stashZ(z)
+      stats.cur.card = z.cardinality()
       stats.cur.uTracker.start
       val uLS = xLS.map(_.zUpdateEnv(z))
         .map(_.uUpdateEnv)
@@ -297,9 +333,9 @@ object SLRSparkImmutable {
       nIters)
       .take(1)(0)
       .z
-    println(stats)
-    z
+    stats.z = z
+    stats.stop
+    stats
   }
-
 }
 
