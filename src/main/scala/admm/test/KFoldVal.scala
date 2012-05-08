@@ -30,19 +30,20 @@ object KFoldVal {
 
     val sc = new SparkContext(host, "testing")
 
-    val rddSet0 : RDD[ReutersSet] = generate_data(sc, m , n, nSplits, sparsityA, sparsityW).cache()
-
-    val rddSet: RDD[ReutersSetID] = ReutersSetID.rddWithIds(rddSet0).cache()
+    val rddSet = ReutersSetID.rddWithIds(generate_data(sc, m , n, nSplits, sparsityA, sparsityW)).cache() // cqche?
 
     val zEst = SolveValidation.kFoldCrossV(rddSet, K)
-    
+
     println("zEst found")
-    //println(zEst)
+    println(zEst)
 
-    //val P : (Int,  Int,  Int,  Int) = successRate(rddSet0, Some(zEst))
+    val P : (Int,  Int,  Int,  Int) = successRate(rddSet.asInstanceOf[RDD[ReutersSet]], Some(zEst))
 
-    //fn.write("P")
-    //fn.write(P.toString())
+    fn.write("P" + "\n")
+    fn.write(P.toString())
+    fn.close()
+
+    println(P)
 
   }
 }

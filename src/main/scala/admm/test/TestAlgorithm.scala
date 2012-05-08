@@ -135,7 +135,7 @@ object TestAlgorithm {
       fn.write("absTol = " + absTol + "\n")
       fn.write("relTol = " + relTol + "\n")
 
-      val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter,absTol,relTol,fn)
+      val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter,absTol,relTol)
 
       val wtrue = data.parameter
       val vtrue = data.offset
