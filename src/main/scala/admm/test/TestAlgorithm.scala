@@ -6,11 +6,11 @@ import cern.colt.matrix.tdouble.algo.DenseDoubleAlgebra
 import admm.data.ReutersData.ReutersSet
 import admm.data.ReutersData
 import admm.util.ADMMFunctions
-import admm.opt.SLRSparkImmutable
 import spark.{RDD, SparkContext}
 import admm.util.ListHelper._
 import cern.colt.matrix.tdouble.{DoubleFactory1D, DoubleFactory2D, DoubleMatrix1D, DoubleMatrix2D}
 import java.io.FileWriter
+import admm.opt.{SLRConfig, SLRSparkImmutable}
 
 
 /**
@@ -134,8 +134,14 @@ object TestAlgorithm {
     def solveAndGetStat(rho:Double,lambda:Double,maxIter:Int,absTol:Double,relTol:Double) {
       fn.write("absTol = " + absTol + "\n")
       fn.write("relTol = " + relTol + "\n")
+      val conf = new SLRConfig
+      conf.rho = rho
+      conf.lambda = lambda
+      conf.nIters = maxIter
+      conf.absTol = absTol
+      conf.relTol = relTol
 
-      val xEst = SLRSparkImmutable.solve(rddSet, rho, lambda, maxIter,absTol,relTol,fn)
+      val xEst = SLRSparkImmutable.solve(rddSet, conf)
 
       val wtrue = data.parameter
       val vtrue = data.offset

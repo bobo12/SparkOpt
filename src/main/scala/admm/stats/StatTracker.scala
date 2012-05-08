@@ -27,7 +27,7 @@ object Tracker {
 class IterTracker[A<:Tracker](fac: () => A = Tracker.fac _) extends Tracker {
   var iters: ListBuffer[A] = ListBuffer[A]()
 
-  def cur = iters.head
+  def cur = iters.last
 
   def newIter {
     val iter = fac()

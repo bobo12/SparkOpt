@@ -15,18 +15,30 @@ import admm.stats.StatTracker
  * Time: 12:34 PM
  */
 
-object SLRSparkImmutable {
+class SLRConfig extends Serializable{
   var rho = 1.0
-  var lambda = 0.01
+  var lambda = 0.1
   var nIters = 10
   var topicId = 0
+  var absTol = .0001
+  var relTol = .01
+  var nDocs = 500
+  var nFeatures = 100
+  var nSlices = 1
+}
 
-  var absTol = 0.0001//this should be tuned
-  var relTol = 0.01//tuning less important because it's a relative value
+object SLRSparkImmutable {
+  val defaultConfig = new SLRConfig
 
-  def solve(rdd: RDD[ReutersSet], _rho: Double = SLRSparkImmutable.rho, _lambda: Double = SLRSparkImmutable.lambda, _nIters: Int = nIters,
-             _absTol: Double = SLRSparkImmutable.absTol, _relTol: Double = SLRSparkImmutable.relTol) =  {
-    
+  def solve(rdd: RDD[ReutersSet], conf: SLRConfig = defaultConfig ) =  {
+    val rho = conf.rho
+    val lambda = conf.lambda
+    val absTol = conf.absTol
+    val relTol = conf.relTol
+    val nIters = conf.nIters
+    val topicId = conf.topicId
+
+
     var algebra = new DenseDoubleAlgebra()
     val stats = new StatTracker
 
@@ -42,13 +54,7 @@ object SLRSparkImmutable {
     val nSlices = rdd.count() // needed on master machine only
 
     class DataEnv(samples: DoubleMatrix2D, outputs: DoubleMatrix1D) extends Serializable {
-      val rho = _rho
-      val lambda = _lambda
-      var algebra = new DenseDoubleAlgebra()
-
-      val absTol = _absTol
-      val relTol = _relTol
-
+      val algebra = new DenseDoubleAlgebra()
       val C = {
         val bPrime = outputs.copy()
         bPrime.assign(DoubleFunctions.mult(2.0)).assign(DoubleFunctions.minus(1.0))
@@ -198,7 +204,7 @@ object SLRSparkImmutable {
         reduced
           .assign(DoubleFunctions.div(nSlices.toDouble))
           .viewPart(1,reduced.size().toInt - 1)
-          .assign(ADMMFunctions.shrinkage(_lambda/_rho/nSlices.toDouble))
+          .assign(ADMMFunctions.shrinkage(lambda/rho/nSlices.toDouble))
 
         reduced
       }
@@ -288,7 +294,7 @@ object SLRSparkImmutable {
     val z = iterate(updateSet,
       stopLearning,
       firstStep,
-      _nIters)
+      nIters)
       .take(1)(0)
       .z
     println(stats)

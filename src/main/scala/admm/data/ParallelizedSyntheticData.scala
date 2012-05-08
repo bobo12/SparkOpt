@@ -7,6 +7,7 @@ import cern.jet.math.tdouble.DoubleFunctions
 import cern.colt.matrix.tdouble.{DoubleMatrix2D, DoubleFactory1D, DoubleMatrix1D}
 import admm.data.ReutersData.ReutersSet
 import admm.stats.SuccessRate.successRate
+import admm.opt.SLRConfig
 
 /**
  * User: jdr
@@ -21,13 +22,13 @@ object ParallelizedSyntheticData {
     def samples = _samples
   }
 
-  def generate_data(sc: SparkContext, nSamples: Int, nFeatures: Int, nSplits: Int, sparsityA: Double, sparsityW: Double) = {
-    val sPerS = nSamples / nSplits
-    val w = sc.broadcast(ADMMFunctions.sprandnvec(nFeatures,sparsityW))
+  def generate_data(sc: SparkContext, conf: SLRConfig, sparsityA: Double, sparsityW: Double) = {
+    val sPerS = conf.nDocs / conf.nSlices
+    val w = sc.broadcast(ADMMFunctions.sprandnvec(conf.nFeatures,sparsityW))
     //val v = sc.broadcast(-1*w.value.zSum()/w.value.size().toDouble)
     val v = sc.broadcast(Random.nextGaussian())
-    sc.parallelize(1 to nSplits).map(_ => {
-      val A = ADMMFunctions.sprandnMatrix(sPerS, nFeatures, sparsityA)
+    sc.parallelize(1 to conf.nSlices).map(_ => {
+      val A = ADMMFunctions.sprandnMatrix(sPerS, conf.nFeatures, sparsityA)
       val b = {
         val bDense = A
           .zMult(w.value,null)

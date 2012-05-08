@@ -2,9 +2,9 @@ package admm.stats
 
 import spark.RDD
 import admm.data.ReutersData.ReutersSet
-import admm.opt.SLRSparkImmutable
 import cern.jet.math.tdouble.DoubleFunctions
 import cern.colt.matrix.tdouble.{DoubleMatrix1D, DoubleFactory1D, DoubleFactory2D}
+import admm.opt.{SLRConfig, SLRSparkImmutable}
 
 /**
  * User: jdr
@@ -14,14 +14,11 @@ import cern.colt.matrix.tdouble.{DoubleMatrix1D, DoubleFactory1D, DoubleFactory2
 
 object SuccessRate {
 
-  def successRate(dataset: RDD[ReutersSet], zValue: Option[DoubleMatrix1D] = None): (Int, Int, Int, Int) = {
+  def successRate(dataset: RDD[ReutersSet], zValue: Option[DoubleMatrix1D] = None, conf: SLRConfig = new SLRConfig): (Int, Int, Int, Int) = {
     zValue match {
-      case None => successRate(dataset, Some(SLRSparkImmutable.solve(dataset)))
-      case _ => {
-        val est = SLRSparkImmutable.solve(dataset)
-        val nSlices = dataset.count()
+      case None => successRate(dataset, Some(SLRSparkImmutable.solve(dataset, conf)))
+      case Some(est) => {
         val sample = dataset.take(1).head.samples
-        val m = sample.rows()
         val n = sample.columns()
         val w = est.viewPart(1, n)
         val v = est.get(0)

@@ -7,25 +7,15 @@ package admm.trials
  */
 import admm.stats.SuccessRate.successRate
 import admm.data.ParallelizedSyntheticData.generate_data
+import admm.opt.SLRConfig
 
-class SparseTrial extends Launchable {
+class SparseTrial extends SLRLaunchable {
 
-  def launch(args: Array[String]) {
-    val outFile = args(0)
-    val sparsities = args.view(1, args.length).map(_.toDouble)
-    println("sparsities are: ")
-    sparsities.foreach(println)
-    val nDocs = 500
-    val nFeatures = 30
-    val nSlices = 5
-    val fn = new java.io.FileWriter(outFile)
+  def launchWithConfig(kws: Map[String, String], conf: SLRConfig) {
+    val sparsities = kws.get("sparsities").get.split(",").map(_.toDouble)
     sparsities.foreach(sp => {
-      val sln = successRate(generate_data(sc, nDocs, nFeatures, nSlices, sp, .5)).toString()
-      fn.write(sp.toString + ":" + sln)
-      fn.write("\n")
+      val sln = successRate(generate_data(sc, conf, sp, .5), conf = conf).toString()
     })
-    fn.close()
-    sc.stop()
   }
 
   def launchID = 1
