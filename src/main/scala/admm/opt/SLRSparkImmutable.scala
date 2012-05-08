@@ -8,6 +8,8 @@ import admm.data.ReutersData.ReutersSet
 import spark.RDD
 import collection.mutable.ArrayBuffer
 import admm.stats.StatTracker
+import java.io.FileWriter
+import collection.immutable.HashMap
 
 /**
  * User: jdr
@@ -25,6 +27,17 @@ class SLRConfig extends Serializable{
   var nDocs = 500
   var nFeatures = 100
   var nSlices = 1
+  var useOutput = false
+  var outputPath: String = ""
+  def setOutput(fn: String) {
+    outputPath = fn
+    useOutput = true
+  }
+  def getWriter = new FileWriter(outputPath)
+  def jsonMap = {
+    HashMap(List("rho","lambda","nIters","topicId", "absTol","relTol", "nDocs", "nFeatures", "nSlices")
+    .zip(List(rho,lambda, nIters, topicId, absTol, relTol, nDocs, nFeatures, nSlices)): _*)
+  }
 }
 
 object SLRSparkImmutable {
@@ -41,6 +54,8 @@ object SLRSparkImmutable {
 
     var algebra = new DenseDoubleAlgebra()
     val stats = new StatTracker
+    stats.start
+    stats.conf = conf
 
     object Cache {
       var prevZ: Option[DoubleMatrix1D] = None
@@ -209,6 +224,7 @@ object SLRSparkImmutable {
         reduced
       }
       Cache.stashZ(z)
+      stats.cur.card = z.cardinality()
       stats.cur.uTracker.start
       val uLS = xLS.map(_.zUpdateEnv(z))
         .map(_.uUpdateEnv)
@@ -297,9 +313,9 @@ object SLRSparkImmutable {
       nIters)
       .take(1)(0)
       .z
-    println(stats)
-    z
+    stats.z = z
+    stats.stop
+    stats
   }
-
 }
 

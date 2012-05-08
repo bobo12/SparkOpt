@@ -55,6 +55,10 @@ trait SLRLaunchable extends KeywordLaunchable {
       case Some(ans) => conf.relTol = ans.toDouble
       case None => "pass"
     }
+    kws.get("fn") match {
+      case Some(ans) => conf.setOutput(ans)
+      case None => "pass"
+    }
     launchWithConfig(kws, conf)
   }
   def launchWithConfig(kws: Map[String, String], conf: SLRConfig)

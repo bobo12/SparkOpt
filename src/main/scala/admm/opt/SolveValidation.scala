@@ -56,7 +56,7 @@ object SolveValidation {
       val rddTrain = rdd.filter(slice => !kSlices.contains(slice.id))
       val rddValid = rdd.filter(slice => kSlices.contains(slice.id))
 
-      val zSol = solve(rddTrain.asInstanceOf[RDD[ReutersSet]], conf)
+      val zSol = solve(rddTrain.asInstanceOf[RDD[ReutersSet]], conf).z
       val sr = {
         val tuple = successRate(rddValid.asInstanceOf[RDD[ReutersSet]], Some(zSol))
         val total = tuple._2 + tuple._4
