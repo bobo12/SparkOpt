@@ -5,6 +5,7 @@ import admm.opt.{SolveValidation, ReutersSetID, SLRConfig}
 import admm.stats.SuccessRate._
 import spark.RDD
 import admm.data.ReutersData.ReutersSet
+import admm.opt.SLRSparkImmutable._
 
 
 /**
@@ -20,11 +21,26 @@ class KFoldTrial extends SLRLaunchable {
 
   def launchWithConfig(kws: Map[String, String], conf: SLRConfig) {
     val k = kws.get("k").get.toInt
+    val p = kws.get("p").get.toInt
     val sparsityA = kws.get("sparsityA").get.toDouble
     val sparsityW = kws.get("sparsityW").get.toDouble
-    val rddSet = ReutersSetID.rddWithIds(generate_data(sc,conf, sparsityA, sparsityW)).cache()
-    val zEst = SolveValidation.kFoldCrossV(rddSet, k, conf = conf)
-    val P : (Int,  Int,  Int,  Int) = successRate(rddSet.asInstanceOf[RDD[ReutersSet]], Some(zEst), conf)
-    println(P)
+
+    // if conf.nSlices > p then :
+
+    val rddSet = ReutersSetID.rddWithIds(generate_data(sc,conf, sparsityA, sparsityW))
+    val rddSetTrain = sc.parallelize(rddSet.take(p),p).cache()
+    val rddSetValid = sc.parallelize(rddSet.toArray().takeRight(conf.nSlices - p), conf.nSlices - p).cache()
+    
+    //val rddSetTrain = ReutersSetID.rddWithIds(sc.parallelize(generate_data(sc,conf, sparsityA, sparsityW).take(p),p)).cache()
+    //val rddSetValid = ReutersSetID.rddWithIds(sc.parallelize(generate_data(sc,conf, sparsityA, sparsityW).toArray().takeRight(conf.nSlices - p), conf.nSlices - p)).cache()
+
+    val zEstKFold = SolveValidation.kFoldCrossV(rddSetTrain, k, conf = conf)
+    val zEstReg = solve(rddSetTrain.asInstanceOf[RDD[ReutersSet]], conf)
+
+    val P1 : (Int,  Int,  Int,  Int) = successRate(rddSetValid.asInstanceOf[RDD[ReutersSet]], Some(zEstKFold), conf)
+    val P2 : (Int,  Int,  Int,  Int) = successRate(rddSetValid.asInstanceOf[RDD[ReutersSet]], Some(zEstReg), conf)
+
+    println(P1)
+    println(P2)
   }
 }

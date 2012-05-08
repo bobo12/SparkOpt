@@ -58,6 +58,7 @@ object SolveValidation {
 
       val zSol = solve(rddTrain.asInstanceOf[RDD[ReutersSet]], conf)
       val sr = {
+
         val tuple = successRate(rddValid.asInstanceOf[RDD[ReutersSet]], Some(zSol))
         val total = tuple._2 + tuple._4
         val right = total - tuple._1 + tuple._3
