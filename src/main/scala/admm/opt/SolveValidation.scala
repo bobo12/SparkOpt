@@ -39,7 +39,7 @@ object ReutersSetID {
 
 object SolveValidation {
 
-  def kFoldCrossV (rdd: RDD[ReutersSetID], k: Int ) : DoubleMatrix1D = {
+  def kFoldCrossV (rdd: RDD[ReutersSetID], k: Int, conf: SLRConfig  ) : DoubleMatrix1D = {
 
 
     val kMap = {
@@ -53,10 +53,10 @@ object SolveValidation {
     val slnAndWeights = (0 until k).map{  kId =>
       val kSlices = kMap.get(kId).get
 
-      val rddTrain = rdd.filter(slice => kSlices.contains(slice.id))
-      val rddValid = rdd.filter(slice => !kSlices.contains(slice.id))
+      val rddTrain = rdd.filter(slice => !kSlices.contains(slice.id))
+      val rddValid = rdd.filter(slice => kSlices.contains(slice.id))
 
-      val zSol = solve(rddTrain.asInstanceOf[RDD[ReutersSet]])
+      val zSol = solve(rddTrain.asInstanceOf[RDD[ReutersSet]], conf)
       val sr = {
         val tuple = successRate(rddValid.asInstanceOf[RDD[ReutersSet]], Some(zSol))
         val total = tuple._2 + tuple._4

@@ -23,8 +23,8 @@ class KFoldTrial extends SLRLaunchable {
     val sparsityA = kws.get("sparsityA").get.toDouble
     val sparsityW = kws.get("sparsityW").get.toDouble
     val rddSet = ReutersSetID.rddWithIds(generate_data(sc,conf, sparsityA, sparsityW)).cache()
-    val zEst = SolveValidation.kFoldCrossV(rddSet, k)
-    val P : (Int,  Int,  Int,  Int) = successRate(rddSet.asInstanceOf[RDD[ReutersSet]], Some(zEst))
+    val zEst = SolveValidation.kFoldCrossV(rddSet, k, conf = conf)
+    val P : (Int,  Int,  Int,  Int) = successRate(rddSet.asInstanceOf[RDD[ReutersSet]], Some(zEst), conf)
     println(P)
   }
 }
