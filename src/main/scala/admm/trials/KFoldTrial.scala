@@ -24,7 +24,7 @@ class KFoldTrial extends SLRLaunchable {
     val p = kws.get("p").get.toInt
     val sparsityA = kws.get("sparsityA").get.toDouble
     val sparsityW = kws.get("sparsityW").get.toDouble
-
+    
     // if conf.nSlices > p then :
 
     val rddSet = ReutersSetID.rddWithIds(generate_data(sc,conf, sparsityA, sparsityW))
@@ -34,13 +34,18 @@ class KFoldTrial extends SLRLaunchable {
     //val rddSetTrain = ReutersSetID.rddWithIds(sc.parallelize(generate_data(sc,conf, sparsityA, sparsityW).take(p),p)).cache()
     //val rddSetValid = ReutersSetID.rddWithIds(sc.parallelize(generate_data(sc,conf, sparsityA, sparsityW).toArray().takeRight(conf.nSlices - p), conf.nSlices - p)).cache()
 
-    val zEstKFold = SolveValidation.kFoldCrossV(rddSetTrain, k, conf = conf)
-    val zEstReg = solve(rddSetTrain.asInstanceOf[RDD[ReutersSet]], conf)
+    val zEstKFold = SolveValidation.kFoldCrossV(rddSetTrain, k, conf)
+    val zEstReg = solve(rddSetTrain.asInstanceOf[RDD[ReutersSet]], conf).z
 
     val P1 : (Int,  Int,  Int,  Int) = successRate(rddSetValid.asInstanceOf[RDD[ReutersSet]], Some(zEstKFold), conf)
     val P2 : (Int,  Int,  Int,  Int) = successRate(rddSetValid.asInstanceOf[RDD[ReutersSet]], Some(zEstReg), conf)
 
     println(P1)
     println(P2)
+
+    println("stuff")
+    println(conf.nSlices)
+    println(conf.nDocs)
+    println(conf.nFeatures)
   }
 }

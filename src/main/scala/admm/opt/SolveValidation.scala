@@ -20,7 +20,7 @@ import admm.data.ReutersData.ReutersSet
  */
 
 
-class ReutersSetID(_samples: DoubleMatrix2D, _outputs: DoubleMatrix1D, _id: Int) extends ReutersSet {
+class ReutersSetID(_samples: DoubleMatrix2D, _outputs: DoubleMatrix1D, _id: Int) extends ReutersSet with Serializable {
   def samples = _samples
   def outputs(i: Int) = _outputs
   def id = _id
