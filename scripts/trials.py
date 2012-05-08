@@ -78,3 +78,27 @@ def local_test():
     lab.figure()
     lab.plot(dejunk([i.time for i in x.iters]), label='d Eps')
     lab.show()
+
+def local_test():
+    fn = '/Users/jdr/Desktop/jazz'
+    n_docs = 200
+    n_features = 20
+    n_slices = 5
+    n_iters = 100
+    launch_local(4, **{fn:' '})
+    x = load_output(fn)
+    [lab.plot(dejunk([i.card for i in j.iters])) for j in x]
+    lab.show()
+    # run_cmd('rm {0}'.format(fn))
+    # lab.plot(dejunk([i.pres for i in x.iters]), label='p Res')
+    # lab.hold(True)
+    # lab.plot(dejunk([i.peps for i in x.iters]), label='p Eps')
+    # lab.legend()
+    # lab.figure()
+    # lab.plot(dejunk([i.dres for i in x.iters]), label='d Res')
+    # lab.hold(True)
+    # lab.plot(dejunk([i.deps for i in x.iters]), label='d Eps')
+    # lab.legend()
+    # lab.figure()
+    # lab.plot(dejunk([i.time for i in x.iters]), label='d Eps')
+    # lab.show()

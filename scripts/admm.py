@@ -169,4 +169,7 @@ def dejunk(lst):
     return filter(lambda x: x >= 0, lst)
 
 def load_output(fn):
-    return obj_dic(load(open(fn,'r')))
+    json = load(open(fn,'r'))
+    if isinstance(json, list):
+        return [obj_dic(j) for j in json]
+    return obj_dic(json)
