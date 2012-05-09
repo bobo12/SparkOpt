@@ -17,7 +17,7 @@ class BigTrial extends SLRLaunchable{
     def launchID = 13
 
     def launchWithConfig(kws: Map[String, String], conf: SLRConfig) {
-        val rdd = generate_data(sc,conf,.5,.5)
+        val rdd = generate_data(sc,conf,.5,.5,math.sqrt(.1))
         val stats = SLRSparkImmutable.solve(rdd, conf)
 
         //val statsSR = computeSuccessRates()
@@ -25,7 +25,7 @@ class BigTrial extends SLRLaunchable{
         successTracker.stat = stats
         val suc = SuccessRate.successRate(rdd, Some(stats.z), conf = conf)
         successTracker.successResult(suc)
-        stats.dumpToFile
+        successTracker.dumpToFile
     }
 
 }

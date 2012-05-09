@@ -124,21 +124,23 @@ class StatTracker extends IterTracker[InnerTracker](InnerTracker.fac _) {
 
 class SuccessTracker extends Tracker {
   var stat : StatTracker = null
+  var posProportion: Double = -1.
   var posSuccessRate:Double = -1.
   var negSuccessRate:Double = -1.
   var totSuccessRate:Double = -1.
   override def jsonMap = {
     val map = super.jsonMap
     val statTrack = stat.jsonMap
-    val values = List(posSuccessRate,negSuccessRate,totSuccessRate)
-    val keys = List("psr", "nsr", "tsr")
+    val values = List(posProportion,posSuccessRate,negSuccessRate,totSuccessRate)
+    val keys = List("pos","psr", "nsr", "tsr")
     val map2 = HashMap(keys.zip(values): _*)
     map ++ map2  ++ statTrack
   }
   def successResult(res: (Int, Int, Int, Int)) {
-    posSuccessRate=  1. - res._1 / res._2
-    negSuccessRate=  1. - res._3 / res._4
-    totSuccessRate=  1. - (res._1 + res._3) / (res._4 + res._2)
+    posSuccessRate=  1. - res._1 / res._2.toDouble
+    negSuccessRate=  1. - res._3 / res._4.toDouble
+    totSuccessRate=  1. - (res._1 + res._3) / (res._4 + res._2).toDouble
+    posProportion= res._2/res._4.toDouble
   }
   def dumpToFile {
     val fn = stat.conf.getWriter
