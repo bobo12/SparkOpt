@@ -121,3 +121,18 @@ class StatTracker extends IterTracker[InnerTracker](InnerTracker.fac _) {
     fn.close()
   }
 }
+
+class SuccessTracker extends Tracker {
+  var stat : StatTracker = null
+  var posSuccessRate:Double = -1.
+  var negSuccessRate:Double = -1.
+  var totSuccessRate:Double = -1.
+  override def jsonMap = {
+    val map = super.jsonMap
+    val statTrack = stat.jsonMap
+    val values = List(posSuccessRate,negSuccessRate,totSuccessRate)
+    val keys = List("psr", "nsr", "tsr")
+    val map2 = HashMap(keys.zip(values): _*)
+    map ++ map2  ++ statTrack
+  }
+}
