@@ -212,7 +212,15 @@ object SLRSparkImmutable {
         def primalResidual : Double = {
           algebra.norm2(x.copy().assign(z,DoubleFunctions.minus))
         }
-
+        def loss(x: DoubleMatrix1D): Double = {
+          val expTerm = C
+            .zMult(x, null)
+            .assign(DoubleFunctions.exp)
+            .assign(DoubleFunctions.plus(1.0))
+            .assign(DoubleFunctions.log)
+            .zSum()
+          expTerm
+        }
       }
       def initLearningEnv = {
         new LearningEnv(DoubleFactory1D.sparse.make(n + 1),DoubleFactory1D.sparse.make(n + 1), DoubleFactory1D.sparse.make(n+1))
@@ -244,6 +252,9 @@ object SLRSparkImmutable {
         reduced
       }
       Cache.stashZ(z)
+      stats.cur.loss = xLS.map(ls => {ls.loss(z)}).reduce(_+_)+lambda * algebra.norm1 (z.viewPart(1,z.size.toInt-1))
+      println("loss")
+      println(stats.cur.loss)
       stats.cur.card = z.cardinality()
       stats.cur.uTracker.start
       val uLS = xLS.map(_.zUpdateEnv(z))

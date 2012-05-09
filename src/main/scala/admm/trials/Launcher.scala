@@ -19,7 +19,8 @@ object Launcher {
     new KFoldTrial,
     new MultiConfTrial,
     new SliceTrial,
-    new SliceTrial3
+    new SliceTrial3,
+    new BigTrial
   )
 
   val launchMap = HashMap(registeredApps.map(l => l.launchID -> l): _*)
