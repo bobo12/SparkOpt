@@ -293,6 +293,10 @@ object SLRSparkImmutable {
 
       val uNorm = rdd.map(ls=>ls.uNorm).reduce(_+_)
       val epsDual = math.sqrt(avNbSamples)*absTol+relTol*rho*uNorm
+
+      val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
+      stats.cur.dEps = epsDual
+      stats.cur.dRes = dualResidual
       //compute dualResidual
       var retour = false
       if(epsPrimal>primalResidual) {
@@ -303,10 +307,6 @@ object SLRSparkImmutable {
             false
           }
           case _ => {
-            println("compute dual residual")
-            val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
-            stats.cur.dEps = epsDual
-            stats.cur.dRes = dualResidual
             if(epsDual>dualResidual) true
             else false
           }

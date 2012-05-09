@@ -2,7 +2,7 @@ package admm.trials
 
 import admm.data.ParallelizedSyntheticData._
 import admm.opt.{SLRSparkImmutable, SLRConfig}
-import admm.stats.SuccessTracker
+import admm.stats.{SuccessRate, SuccessTracker}
 
 /**
  * Created by IntelliJ IDEA.
@@ -21,10 +21,11 @@ class BigTrial extends SLRLaunchable{
         val stats = SLRSparkImmutable.solve(rdd, conf)
 
         //val statsSR = computeSuccessRates()
-
-
-
-        stats.dumpToFile
+        /*val successTracker = new SuccessTracker
+        successTracker.stat = stats
+        val suc = SuccessRate.successRate(rdd, Some(stats.z), conf = conf)
+        successTracker.
+        stats.dumpToFile*/
     }
 
     /*def computeSuccessRates():SuccessTracker{
