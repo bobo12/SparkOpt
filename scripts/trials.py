@@ -86,9 +86,9 @@ def local_test():
     n_slices = 5
     n_iters = 100
     launch_local(4, **{fn:' '})
-    x = load_output(fn)
-    [lab.plot(dejunk([i.card for i in j.iters])) for j in x]
-    lab.show()
+    #    x = load_output(fn)
+    #    [lab.plot(dejunk([i.card for i in j.iters])) for j in x]
+    #    lab.show()
     # run_cmd('rm {0}'.format(fn))
     # lab.plot(dejunk([i.pres for i in x.iters]), label='p Res')
     # lab.hold(True)

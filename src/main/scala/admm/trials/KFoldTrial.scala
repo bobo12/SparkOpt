@@ -26,6 +26,7 @@ class KFoldTrial extends SLRLaunchable {
     val sparsityW = kws.get("sparsityW").get.toDouble
     
     // if conf.nSlices > p then :
+    assert(conf.nSlices > p)
 
     val rddSet = ReutersSetID.rddWithIds(generate_data(sc,conf, sparsityA, sparsityW))
     val rddSetTrain = sc.parallelize(rddSet.take(p),p).cache()
