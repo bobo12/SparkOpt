@@ -140,7 +140,7 @@ class SuccessTracker extends Tracker {
     posSuccessRate=  1. - res._1 / res._2.toDouble
     negSuccessRate=  1. - res._3 / res._4.toDouble
     totSuccessRate=  1. - (res._1 + res._3) / (res._4 + res._2).toDouble
-    posProportion= res._2/res._4.toDouble
+    posProportion= res._2/(res._2+res._4).toDouble
   }
   def dumpToFile {
     val fn = stat.conf.getWriter

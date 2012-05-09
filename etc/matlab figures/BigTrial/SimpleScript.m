@@ -6,6 +6,7 @@
 % Then you have the BigTrial file and you can run this script
 
 % experiment with numbers
+% noise standard deviation = sqrt(0.1)
 % lambda = 1
 % nDocs = 500
 % nFeatures = 50
@@ -20,6 +21,17 @@
 import java.util.ArrayList;
 
 x = loadjson('../../../BigTrial');
+
+display('-----------------------------------------------------------------')
+display('PROPORTION OF POSITIVE LABELS IN SYNTHEIC DATA');
+disp(x.pos);
+display('RESULTS OF ALGORITHM');
+display('positive success rate = ');
+disp(x.psr);
+display('negative success rate = ');
+disp(x.nsr);
+display('total success rate = ');
+disp(x.tsr);
 
 %loss function
 y = [x.iters.loss];
