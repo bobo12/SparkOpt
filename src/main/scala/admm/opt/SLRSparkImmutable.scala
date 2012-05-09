@@ -29,6 +29,19 @@ trait SLRWriter {
 }
 
 class SLRConfig extends Serializable with SLRWriter{
+  def copy: SLRConfig = {
+    val conf = new SLRConfig
+    conf.rho = rho
+    conf.lambda = lambda
+    conf.nIters = nIters
+    conf.topicId = topicId
+    conf.absTol = absTol
+    conf.relTol = relTol
+    conf.nDocs = nDocs
+    conf.nFeatures = nFeatures
+    conf.nSlices = nSlices
+    conf
+  }
   var rho = 1.0
   var lambda = 0.1
   var nIters = 10
