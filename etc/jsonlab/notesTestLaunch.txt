@@ -1,0 +1,18 @@
+create a new file
+extend launchable
+
+def launchId different from otehrs
+
+def launch (you already have sc)
+arguments : local 10 etc...
+
+for ex,
+try different number of slices
+(see the SliceTrial)
+
+then add the new launcher in launchmap
+do what you want
+
+for quicker things use keywordLaunch and even better SLRLaunchable
+
+go to matlab and use loadjson(file)

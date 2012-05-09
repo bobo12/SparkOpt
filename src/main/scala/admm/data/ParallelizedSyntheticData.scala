@@ -22,7 +22,7 @@ object ParallelizedSyntheticData {
     def samples = _samples
   }
 
-  def generate_data(sc: SparkContext, conf: SLRConfig, sparsityA: Double, sparsityW: Double) = {
+  def generate_data(sc: SparkContext, conf: SLRConfig, sparsityA: Double, sparsityW: Double, noiseStd : Double = 0) = {
     val sPerS = conf.nDocs / conf.nSlices
     val w = sc.broadcast(ADMMFunctions.sprandnvec(conf.nFeatures,sparsityW))
     val v = sc.broadcast(-1*w.value.zSum()/w.value.size().toDouble)
@@ -30,12 +30,13 @@ object ParallelizedSyntheticData {
     sc.parallelize(1 to conf.nSlices).map(_ => {
       val A = ADMMFunctions.sprandnMatrix(sPerS, conf.nFeatures, sparsityA)
       val b = {
+        val noise = ADMMFunctions.sprandnvec(sPerS,1.0).assign(DoubleFunctions.mult(noiseStd))
         val bDense = A
           .zMult(w.value,null)
           .assign(DoubleFunctions.plus(v.value))
           .assign(DoubleFunctions.sign)
-          .assign(DoubleFunctions.plus(1))
-          .assign(DoubleFunctions.div(2))
+          .assign(noise,DoubleFunctions.plus)
+          .assign(DoubleFunctions.greater(0))
         DoubleFactory1D.sparse.make(bDense.toArray)
       }
       ParSynSet(A,b).asInstanceOf[ReutersSet]

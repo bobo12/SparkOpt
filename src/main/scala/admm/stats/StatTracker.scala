@@ -92,10 +92,11 @@ class InnerTracker extends Tracker {
   var dRes = -1.
   var dEps = -1.
   var card = -1
+  var loss = -1.
   override def jsonMap = {
     val map = super.jsonMap
-    val titles = List[String]("time","pres", "peps", "dres", "deps", "card")
-    val values = List(time.toDouble, pRes, pEps, dRes, dEps, card)
+    val titles = List[String]("time","pres", "peps", "dres", "deps", "card", "loss")
+    val values = List(time.toDouble, pRes, pEps, dRes, dEps, card, loss)
     val zips = HashMap(titles.zip(values): _*)
     map ++ zips
   }
@@ -113,5 +114,10 @@ class StatTracker extends IterTracker[InnerTracker](InnerTracker.fac _) {
     val zArr = z.toArray
     val zConf = conf.jsonMap
     (map + (("z", zArr))) ++ zConf
+  }
+  def dumpToFile {
+    val fn = conf.getWriter
+    fn.write(toJson())
+    fn.close()
   }
 }
