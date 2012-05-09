@@ -28,7 +28,20 @@ trait SLRWriter {
   def getWriter = new FileWriter(outputPath)
 }
 
-class SLRConfig extends Serializable with SLRWriter{
+class SLRConfig extends Serializable with SLRWriter with Cloneable{
+  def copy: SLRConfig = {
+    val conf = new SLRConfig
+    conf.rho = rho
+    conf.lambda = lambda
+    conf.nIters = nIters
+    conf.topicId = topicId
+    conf.absTol = absTol
+    conf.relTol = relTol
+    conf.nDocs = nDocs
+    conf.nFeatures = nFeatures
+    conf.nSlices = nSlices
+    conf
+  }
   var rho = 1.0
   var lambda = 0.1
   var nIters = 10
