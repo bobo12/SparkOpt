@@ -21,15 +21,11 @@ class BigTrial extends SLRLaunchable{
         val stats = SLRSparkImmutable.solve(rdd, conf)
 
         //val statsSR = computeSuccessRates()
-        /*val successTracker = new SuccessTracker
+        val successTracker = new SuccessTracker
         successTracker.stat = stats
         val suc = SuccessRate.successRate(rdd, Some(stats.z), conf = conf)
-        successTracker.
-        stats.dumpToFile*/
+        successTracker.successResult(suc)
+        stats.dumpToFile
     }
 
-    /*def computeSuccessRates():SuccessTracker{
-        val P1 : (Int,  Int,  Int,  Int) = successRate(rdd, Some(zEstKFold), conf)
-        val P2 : (Int,  Int,  Int,  Int) = successRate(rddSetValid.asInstanceOf[RDD[ReutersSet]], Some(zEstReg), conf)
-    }*/
 }

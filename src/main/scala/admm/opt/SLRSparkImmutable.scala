@@ -28,20 +28,7 @@ trait SLRWriter {
   def getWriter = new FileWriter(outputPath)
 }
 
-class SLRConfig extends Serializable with SLRWriter with Cloneable{
-  def copy: SLRConfig = {
-    val conf = new SLRConfig
-    conf.rho = rho
-    conf.lambda = lambda
-    conf.nIters = nIters
-    conf.topicId = topicId
-    conf.absTol = absTol
-    conf.relTol = relTol
-    conf.nDocs = nDocs
-    conf.nFeatures = nFeatures
-    conf.nSlices = nSlices
-    conf
-  }
+class SLRConfig extends Serializable with SLRWriter{
   var rho = 1.0
   var lambda = 0.1
   var nIters = 10
@@ -53,7 +40,7 @@ class SLRConfig extends Serializable with SLRWriter with Cloneable{
   var nSlices = 1
   def jsonMap = {
     HashMap(List("rho","lambda","nIters","topicId", "absTol","relTol", "nDocs", "nFeatures", "nSlices")
-    .zip(List(rho,lambda, nIters, topicId, absTol, relTol, nDocs, nFeatures, nSlices)): _*)
+      .zip(List(rho,lambda, nIters, topicId, absTol, relTol, nDocs, nFeatures, nSlices)): _*)
   }
 }
 
@@ -306,25 +293,24 @@ object SLRSparkImmutable {
 
       val uNorm = rdd.map(ls=>ls.uNorm).reduce(_+_)
       val epsDual = math.sqrt(avNbSamples)*absTol+relTol*rho*uNorm
-
-      val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
       stats.cur.dEps = epsDual
-      stats.cur.dRes = dualResidual
+
       //compute dualResidual
-      var retour = false
-      if(epsPrimal>primalResidual) {
-        retour = Cache.prevZ match {
-          case None => {
-            println("none")
-            // there is no prevZ so can't do anything!
-            false
-          }
-          case _ => {
-            if(epsDual>dualResidual) true
-            else false
-          }
+      val dualTest = Cache.prevZ match {
+        case None => {
+          println("none")
+          // there is no prevZ so can't do anything!
+          false
+        }
+        case _ => {
+          println("compute dual residual")
+          val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
+          stats.cur.dRes = dualResidual
+          if(epsDual>dualResidual) true
+          else false
         }
       }
+      val retour = dualTest&&(epsPrimal>primalResidual)
       retour
     }
 
