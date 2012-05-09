@@ -135,4 +135,9 @@ class SuccessTracker extends Tracker {
     val map2 = HashMap(keys.zip(values): _*)
     map ++ map2  ++ statTrack
   }
+  def dumpToFile {
+    val fn = stat.conf.getWriter
+    fn.write(toJson())
+    fn.close()
+  }
 }
