@@ -80,9 +80,9 @@ object StandardizedData {
     val Apath = "/Users/jdr/Documents/github-projects/SparkOpt/etc/A.data"
     val Bpath = "/Users/jdr/Documents/github-projects/SparkOpt/etc/b.data"
     val fn = "/Users/jdr/Desktop/std"
-    val ndocs = 200
-    val nfeatures = 20
-    val nslices = 2
+    val ndocs = 500
+    val nfeatures = 50
+    val nslices = 1
     val conf = new SLRConfig
     conf.nDocs = ndocs
     conf.nFeatures = nfeatures
