@@ -135,4 +135,14 @@ class SuccessTracker extends Tracker {
     val map2 = HashMap(keys.zip(values): _*)
     map ++ map2  ++ statTrack
   }
+  def successResult(res: (Int, Int, Int, Int)) {
+    posSuccessRate=  1. - res._1 / res._2
+    negSuccessRate=  1. - res._3 / res._4
+    totSuccessRate=  1. - (res._1 + res._3) / (res._4 + res._2)
+  }
+  def dumpToFile {
+    val fn = stat.conf.getWriter
+    fn.write(toJson())
+    fn.close()
+  }
 }
