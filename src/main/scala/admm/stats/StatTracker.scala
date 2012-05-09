@@ -114,4 +114,9 @@ class StatTracker extends IterTracker[InnerTracker](InnerTracker.fac _) {
     val zConf = conf.jsonMap
     (map + (("z", zArr))) ++ zConf
   }
+  def dumpToFile {
+    val fn = conf.getWriter
+    fn.write(toJson())
+    fn.close()
+  }
 }
