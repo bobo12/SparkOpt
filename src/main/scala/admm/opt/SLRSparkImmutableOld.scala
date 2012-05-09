@@ -6,11 +6,7 @@ import cern.colt.matrix.tdouble.{DoubleFactory1D, DoubleMatrix1D, DoubleFactory2
 import admm.util.ADMMFunctions
 import admm.data.ReutersData.ReutersSet
 import spark.RDD
-import collection.mutable.ArrayBuffer
 import admm.stats.StatTracker
-import java.io.FileWriter
-import collection.immutable.HashMap
-import com.twitter.json.{JsonSerializable, Json}
 
 /**
  * User: jdr
@@ -18,62 +14,9 @@ import com.twitter.json.{JsonSerializable, Json}
  * Time: 12:34 PM
  */
 
-trait SLRWriter {
-  var useOutput = false
-  var outputPath: String = ""
-  def setOutput(fn: String) {
-    outputPath = fn
-    useOutput = true
-  }
-  def getWriter = new FileWriter(outputPath)
-}
 
-class SLRConfig extends Serializable with SLRWriter{
-  def copy: SLRConfig = {
-    val conf = new SLRConfig
-    conf.rho = rho
-    conf.lambda = lambda
-    conf.nIters = nIters
-    conf.topicId = topicId
-    conf.absTol = absTol
-    conf.relTol = relTol
-    conf.nDocs = nDocs
-    conf.nFeatures = nFeatures
-    conf.nSlices = nSlices
-    conf
-  }
-  var rho = 1.0
-  var lambda = 0.1
-  var nIters = 10
-  var topicId = 0
-  var absTol = .0001
-  var relTol = .01
-  var nDocs = 500
-  var nFeatures = 100
-  var nSlices = 1
-  def jsonMap = {
-    HashMap(List("rho","lambda","nIters","topicId", "absTol","relTol", "nDocs", "nFeatures", "nSlices")
-      .zip(List(rho,lambda, nIters, topicId, absTol, relTol, nDocs, nFeatures, nSlices)): _*)
-  }
-}
 
-class Experiment(rdd: RDD[ReutersSet], confs: Seq[SLRConfig], filePath: String) extends SLRWriter with JsonSerializable {
-  confs.foreach(_.useOutput = false)
-  setOutput(filePath)
-  def solveSet = {
-    confs.map(SLRSparkImmutable.solve(rdd, _))
-  }
-  override def toJson() = {
-    Json.build(solveSet.map(_.jsonMap)).toString()
-  }
-  def serializeSolution {
-    val fn = getWriter
-    fn.write(toJson())
-    fn.close()
-  }
-}
-
-object SLRSparkImmutable {
+object SLRSparkImmutableOld {
   val defaultConfig = new SLRConfig
 
   def solve(rdd: RDD[ReutersSet], conf: SLRConfig = defaultConfig ) =  {
@@ -183,15 +126,9 @@ object SLRSparkImmutable {
                 val grad = gradient(xPrev)
                 val norm = algebra.norm2(grad)
                 stats.iters.head.xTracker.iters.head.iters.head.gradientNorm = norm
-                val t = backtracking(xPrev, grad.copy().assign(DoubleFunctions.neg), grad)
-                val _z = xPrev.copy().assign(grad, DoubleFunctions.plusMultSecond(-t))
-                val gz = gradient(_z)
-                val yk = gz.copy().assign(grad,DoubleFunctions.minus)
-                val ak = t*grad.zDotProduct(grad)
-                val bk = -t*yk.zDotProduct(grad)
-                val thetak = ak / bk
-                println("\n\n\nthetak::: " + thetak.toString + "\n\n\n\n")
-                val xNext = xPrev.copy().assign(grad, DoubleFunctions.plusMultSecond(-thetak*t))
+                val direction = grad.copy().assign(DoubleFunctions.neg)
+                val t = backtracking(xPrev, direction, grad)
+                val xNext = xPrev.copy().assign(direction, DoubleFunctions.plusMultSecond(t))
                 if (norm < tol || (counter >= maxIter)) {
                   println("last iter: " + counter.toString)
                   stats.iters.head.xTracker.iters.head.endIter
@@ -306,24 +243,25 @@ object SLRSparkImmutable {
 
       val uNorm = rdd.map(ls=>ls.uNorm).reduce(_+_)
       val epsDual = math.sqrt(avNbSamples)*absTol+relTol*rho*uNorm
-      stats.cur.dEps = epsDual
-
       //compute dualResidual
-      val dualTest = Cache.prevZ match {
-        case None => {
-          println("none")
-          // there is no prevZ so can't do anything!
-          false
-        }
-        case _ => {
-          println("compute dual residual")
-          val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
-          stats.cur.dRes = dualResidual
-          if(epsDual>dualResidual) true
-          else false
+      var retour = false
+      if(epsPrimal>primalResidual) {
+        retour = Cache.prevZ match {
+          case None => {
+            println("none")
+            // there is no prevZ so can't do anything!
+            false
+          }
+          case _ => {
+            println("compute dual residual")
+            val dualResidual = rho*algebra.norm2(Cache.curZ.get.copy().assign(Cache.prevZ.get,DoubleFunctions.minus))
+            stats.cur.dEps = epsDual
+            stats.cur.dRes = dualResidual
+            if(epsDual>dualResidual) true
+            else false
+          }
         }
       }
-      val retour = dualTest&&(epsPrimal>primalResidual)
       retour
     }
 
@@ -367,4 +305,3 @@ object SLRSparkImmutable {
     stats
   }
 }
-
