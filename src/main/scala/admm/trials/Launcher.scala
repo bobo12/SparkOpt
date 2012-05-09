@@ -20,7 +20,8 @@ object Launcher {
     new MultiConfTrial,
     new SliceTrial,
     new SliceTrial3,
-    new BigTrial
+    new BigTrial,
+    new SimpleTrial
   )
 
   val launchMap = HashMap(registeredApps.map(l => l.launchID -> l): _*)
