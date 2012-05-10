@@ -31,6 +31,14 @@ trait SLRLaunchable extends KeywordLaunchable {
       case Some(ans) => conf.nFeatures = ans.toInt
       case None => "pass"
     }
+    kws.get("sd") match {
+      case Some(ans) => conf.startDoc = ans.toInt
+      case None => "pass"
+    }
+    kws.get("sf") match {
+      case Some(ans) => conf.startFeature = ans.toInt
+      case None => "pass"
+    }
     kws.get("ns") match {
       case Some(ans) => conf.nSlices = ans.toInt
       case None => "pass"
