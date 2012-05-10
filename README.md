@@ -3,7 +3,9 @@
 ## Team Members
 
 Johann Grauzam
+
 Boris Prodhomme
+
 Jack Reilly
 
 ## Navigation
