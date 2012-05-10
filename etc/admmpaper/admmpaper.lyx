@@ -1,0 +1,3813 @@
+#LyX 2.0 created this file. For more info see http://www.lyx.org/
+\lyxformat 413
+\begin_document
+\begin_header
+\textclass article
+\begin_preamble
+\usepackage{fullpage}
+\end_preamble
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_amsmath 1
+\use_esint 1
+\use_mhchem 1
+\use_mathdots 1
+\cite_engine basic
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Cache-Reduce: Implementing Collaborative Filtering on a Cluster with the
+ Spark Framework
+\end_layout
+
+\begin_layout Author
+Johann Grauzam 
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+and
+\end_layout
+
+\end_inset
+
+ Boris Prodhomme 
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+and
+\end_layout
+
+\end_inset
+
+ Jack Reilly
+\end_layout
+
+\begin_layout Section
+Introduction
+\end_layout
+
+\begin_layout Standard
+Our project focuses on using the distributed ADMM algorithm on the Spark
+ framework.
+ The end goal is to compare the running time of the algorithm on both the
+ Spark framework and the traditional Hadoop framework to see the benefits
+ of using in-memory cluster computing techniques.
+ We also discuss implementation details, and other tunable parameters pertaining
+ to the optimization problem.
+\end_layout
+
+\begin_layout Standard
+The ADMM algorithm is described extensively in 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "boyd2004convex"
+
+\end_inset
+
+ as a method for distributed optimization.
+ The distributed aspect of computation comes from the separability of the
+ subproblems expressed in the ADMM algorithm.
+ More specifically, for problems such as lasso, support vector machines,
+ and logistic regression, the ADMM can lead directly to a collaborative
+ filtering formulation.
+ For the sparse logistic regression problem, 
+\begin_inset Formula $\underset{x}{\min}\ell\left(Ax-b\right)+\lambda\left\Vert x\right\Vert _{1}$
+\end_inset
+
+ with logistic loss function 
+\begin_inset Formula $\ell\left(x\right)=\log\left(1+\exp\left(-x\right)\right)$
+\end_inset
+
+, the 
+\begin_inset Formula $A$
+\end_inset
+
+ and 
+\begin_inset Formula $b$
+\end_inset
+
+ can be split across examples to give the parallelized version of the algorithm:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+x_{i}^{k+1} & = & \arg\min_{x}\left(\ell_{i}(A_{i}x\right)+\frac{\rho}{2}\left\Vert x-z^{k}+u_{i}^{k}\right\Vert _{2}^{2}\\
+z^{k} & = & S_{\lambda/\rho N}\left(\bar{x}^{k+1}+\bar{u}^{k}\right)\\
+u_{i}^{k+1} & = & u_{i}^{k}+x_{i}^{k+1}-z^{k+1}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+where all 
+\begin_inset Formula $x_{i}$
+\end_inset
+
+ and 
+\begin_inset Formula $u_{i}$
+\end_inset
+
+ can be updated in parallel.
+\end_layout
+
+\begin_layout Standard
+This algorithm lends itself particularly well to the map-reduce framework
+ for parallel computing 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Dean2008"
+
+\end_inset
+
+, except for one particular downside.
+ Map-reduce is typically involves a single map-reduce process, which means
+ that state need not be persistent over map jobs, since they are one-off
+ jobs.
+ In ADMM, however, this is not the case as this is an iterative algorithm
+ where the 
+\begin_inset Formula $A_{i},b_{i}$
+\end_inset
+
+ data are needed for each iteration of 
+\begin_inset Formula $x_{i},u_{i}$
+\end_inset
+
+.
+ Loading the data for each successive iteration of the algorithm can be
+ expensive, in particular in distributed systems, where network communication
+ is the bottleneck.
+\end_layout
+
+\begin_layout Standard
+The Spark framework was created with these types of tasks in mind.
+ The framework allows one to 
+\emph on
+cache
+\emph default
+ variables across map iterations, enabling persistence of states of calculation.
+ We seek to quantify the benefits of such persistence over the standard
+ Hadoop-style map-reduce.
+\end_layout
+
+\begin_layout Standard
+We believe the combination of ADMM parallelization of convex optimization
+ problems and the in-memory distributed programming model of Spark has the
+ potential to be a game-changer for huge-scale model-learning problems.
+ As a proof of concept, we hope to apply this particular strategy to the
+ Reuters Corpus Volume 1 data set (RCV1) 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Lewis2004"
+
+\end_inset
+
+.
+ The dataset consists of over 800,000 documents with manually added topic
+ tags.
+ The problem we wish to apply is sparse logistic regression in order understand
+ which keywords are relevant to certain topics.
+ Such problems are very difficult to solve using standard convex optimization
+ algorithms given the size of the dataset (250 GB, 800,000 samples, 50,000
+ features).
+ We wish to show the performance of our system with that of previous attempts
+ of 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Lewis2004"
+
+\end_inset
+
+ and standard Hadoop-style map-reduce 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Dean2008"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The rest of the report is organized as follows.
+ First we present some theoretical background on the ADMM algorithm and
+ Logistic Regression.
+ We then give an overview of the Spark software platform and discuss how
+ it is utilized in our problem.
+ Next we discuss the Reuters data set and how sparse logistic regression
+ can be used to analyze the data set.
+ Then we present the implementation of the ADMM algorithm within the Spark
+ context for specifically a sparse logistic regression problem with sparse
+ data-sets.
+ Then we discuss the details of the distributed architecture and implementation
+ details on the cluster and deployment mechanisms.
+ Our next section gives our main numerical results in the form of a series
+ of experiments that compare results from simulations with varying tuning
+ parameters, architectural parameters, and data set natures.
+ Next we discuss some limitation of the current Spark implementation and
+ a proposal for extending Spark with a data structure more amenable to ADMM
+ applications.
+ Some ideas are given about how our current work could be extended into
+ a general-purpose collaborative-filtering platform.
+ Finally, we discuss future directions.
+\end_layout
+
+\begin_layout Section
+Theory Background
+\begin_inset CommandInset label
+LatexCommand label
+name "Alternating Direction Method of Multipliers (ADMM)"
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Subsection
+Dual Ascent
+\begin_inset CommandInset label
+LatexCommand label
+name "Dual Ascent"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Let consider the following convex optimization problem 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Boyd2010a"
+
+\end_inset
+
+: 
+\begin_inset Formula 
+\begin{eqnarray}
+\underset{x}{\text{minimize}} &  & f(x)\label{Dual_ascent_pb}\\
+\text{subject to} &  & Ax=b,\nonumber 
+\end{eqnarray}
+
+\end_inset
+
+ with variables 
+\begin_inset Formula $x\in\mathbb{R}^{n}$
+\end_inset
+
+, where 
+\begin_inset Formula $A\in\mathbb{R}^{m\times n}$
+\end_inset
+
+ and 
+\begin_inset Formula $f:\mathbb{R}^{n}\to\mathbb{R}$
+\end_inset
+
+ is convex.
+ The Lagrangian of problem (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "Dual_ascent_pb"
+
+\end_inset
+
+) is: 
+\begin_inset Formula 
+\begin{eqnarray*}
+L(x,\nu)=f(x)+\nu^{T}(b-Ax)
+\end{eqnarray*}
+
+\end_inset
+
+ and the dual function is: 
+\begin_inset Formula 
+\begin{eqnarray*}
+g(\nu)=\underset{x}{\text{min }}L(x,\nu)=-f^{*}(-A^{T}\nu)-b^{T}\nu
+\end{eqnarray*}
+
+\end_inset
+
+ where 
+\begin_inset Formula $\nu$
+\end_inset
+
+ is the dual variable, and 
+\begin_inset Formula $f^{*}$
+\end_inset
+
+ is the convex conjugate of 
+\begin_inset Formula $f$
+\end_inset
+
+.
+ The dual is given by: 
+\begin_inset Formula 
+\begin{eqnarray*}
+\underset{\nu}{\text{maximize}} &  & g(\nu)
+\end{eqnarray*}
+
+\end_inset
+
+ with variable 
+\begin_inset Formula $\nu\in\mathbb{R}^{m}$
+\end_inset
+
+.
+ Assuming that the strong duality holds, the optimal values of the primal
+ and the dual are the same.
+ Then the following relation holds: 
+\begin_inset Formula 
+\begin{eqnarray*}
+x^{*} & = & \underset{x}{\text{argmin }}L(x,\nu),
+\end{eqnarray*}
+
+\end_inset
+
+ where 
+\begin_inset Formula $x^{*}$
+\end_inset
+
+ and 
+\begin_inset Formula $y^{*}$
+\end_inset
+
+ are the two optimal arguments for the primal and the dual problem.
+\end_layout
+
+\begin_layout Standard
+The dual ascent method solves the dual problem using gradient ascent.
+ Assuming that 
+\begin_inset Formula $g$
+\end_inset
+
+ is differentiable, we can evaluate 
+\begin_inset Formula $\nabla g(\nu)$
+\end_inset
+
+ with 
+\begin_inset Formula $\nabla g(\nu)=Ax^{+}-b$
+\end_inset
+
+, which is the residual of the equality constraint and where 
+\begin_inset Formula $x^{+}=\text{argmin}_{x}L(x,\nu)$
+\end_inset
+
+.
+ The dual ascent method is given by this iteration: 
+\begin_inset Formula 
+\begin{eqnarray*}
+x^{k+1} & := & \underset{x}{\text{argmin }}L(x,\nu^{k})\\
+\nu^{k+1} & := & \nu^{k}+\alpha^{k}(Ax^{k+1}-b),
+\end{eqnarray*}
+
+\end_inset
+
+ where 
+\begin_inset Formula $\alpha^{k}>0$
+\end_inset
+
+ is a step size, and the superscript is the iteration counter.
+ We notice that this method is called dual ascent because with appropriate
+ choice of 
+\begin_inset Formula $\alpha^{k}$
+\end_inset
+
+, the dual function increases in each step, i.e.
+ 
+\begin_inset Formula $g(\nu^{k}+1)>g(\nu^{k})$
+\end_inset
+
+.
+ The dual ascent can also be used with non differentiable function under
+ some modifications.
+ For an appropriate choice of 
+\begin_inset Formula $\alpha^{k}$
+\end_inset
+
+ and under other conditions, we can make 
+\begin_inset Formula $x^{k}$
+\end_inset
+
+ and 
+\begin_inset Formula $\nu^{k}$
+\end_inset
+
+ converge to optimal primal and dual points.
+ However, there is many example where the dual ascent method cannot be used.
+ The dual ascent method is very interesting because it can lead to a decentraliz
+ed algorithm, meaning that the problem can be split into different peaces,
+ which can be sold in parallel.
+ Then for a separable function 
+\begin_inset Formula $f$
+\end_inset
+
+, we get: 
+\begin_inset Formula 
+\begin{eqnarray*}
+f(x) & = & \sum\limits _{i=1}^{N}f_{i}(x_{i})
+\end{eqnarray*}
+
+\end_inset
+
+ where 
+\begin_inset Formula $x=(x_{1},...,x_{N})$
+\end_inset
+
+ and the variable 
+\begin_inset Formula $x_{i}\in\mathbb{R}^{n_{i}}$
+\end_inset
+
+ are sub-vectors of 
+\begin_inset Formula $x$
+\end_inset
+
+.
+ Then we partition the 
+\begin_inset Formula $A$
+\end_inset
+
+ matrix so that we have: 
+\begin_inset Formula 
+\begin{eqnarray*}
+A & = & [A_{1}...A_{N}]\\
+Ax & = & \sum\limits _{i=1}^{N}A_{i}x_{i}
+\end{eqnarray*}
+
+\end_inset
+
+ Then the Lagrangian is written as: 
+\begin_inset Formula 
+\begin{eqnarray*}
+L(x,\nu)=\sum\limits _{i=1}^{N}L_{i}(x_{i},\nu)=\sum\limits _{i=1}^{N}(f_{i}(x_{i})+\nu^{T}A_{i}x_{i}-(1/N)\nu^{T}b)
+\end{eqnarray*}
+
+\end_inset
+
+ Then the dual ascent algorithm is given by: 
+\begin_inset Formula 
+\begin{eqnarray*}
+x_{i}^{k+1} & := & \underset{x_{i}}{\text{argmin }}L_{i}(x_{i},\nu^{k})\\
+\nu^{k+1} & := & \nu^{k}+\alpha^{k}(Ax^{k+1}-b)
+\end{eqnarray*}
+
+\end_inset
+
+ We notice that the 
+\begin_inset Formula $x$
+\end_inset
+
+-minimization can be carried out independently, in parallel, for each 
+\begin_inset Formula $i=1,...,N$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Method of Multipliers
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset label
+LatexCommand label
+name "Method of Multipliers"
+
+\end_inset
+
+ The method of multipliers consists in augmenting the convex optimization
+ problem (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "Dual_ascent_pb"
+
+\end_inset
+
+).
+ We consider now: 
+\begin_inset Formula 
+\begin{eqnarray}
+\underset{x}{\text{minimize}} &  & f(x)+(\rho/2)||Ax-b||_{2}^{2}\label{M_M_pb}\\
+\text{subject to} &  & Ax=b,\nonumber 
+\end{eqnarray}
+
+\end_inset
+
+ Where 
+\begin_inset Formula $\rho>0$
+\end_inset
+
+ is called the penalty parameter.
+ This is an equivalent problem because the equality constraint imposes to
+ have 
+\begin_inset Formula $||Ax-b||=0$
+\end_inset
+
+.
+ Then the augmented Lagrangian becomes: 
+\begin_inset Formula 
+\begin{eqnarray*}
+L_{rho}(x,\nu)=f(x)+\nu^{T}(Ax-b)+(\rho/2)||Ax-b||_{2}^{2}
+\end{eqnarray*}
+
+\end_inset
+
+ The augmented methods are useful to make more robust the dual ascent method
+ for example, and to avoid assumption as strict convexity or finiteness
+ of 
+\begin_inset Formula $f$
+\end_inset
+
+.
+ Then applying the dual ascent method to this new problem, we obtain the
+ following algorithm: 
+\begin_inset Formula 
+\begin{eqnarray}
+x^{k+1} & := & \underset{x}{\text{argmin }}L_{\rho}(x,\nu^{k})\label{M_M_alg}\\
+\nu^{k+1} & := & \nu^{k}+\rho(Ax^{k+1}-b),
+\end{eqnarray}
+
+\end_inset
+
+ This is known as the method of multipliers.
+ This method converges under far more general conditions than dual ascent,
+ including cases when 
+\begin_inset Formula $f$
+\end_inset
+
+ takes on the value 
+\begin_inset Formula $+\infty$
+\end_inset
+
+ or is not strictly convex.
+ The improved convergence properties reached thanks to the method of multipliers
+ has a cost.
+ Indeed we notice now that even if 
+\begin_inset Formula $f$
+\end_inset
+
+ is separable, the augmented Lagrangian 
+\begin_inset Formula $L_{rho}$
+\end_inset
+
+ is not separable anymore with the basic algorithm given in (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "M_M_alg"
+
+\end_inset
+
+).
+ Then we cannot use decomposition anymore.
+ This is one the reason why the ADMM was created.
+\end_layout
+
+\begin_layout Subsection
+ADMM
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset label
+LatexCommand label
+name "ADMM"
+
+\end_inset
+
+ The dual ascent method and the method of multipliers are both really useful
+ as described above.
+ ADMM is an algorithm that tries to gather advantages of these two method,
+ in minimizing the cost due to this combination.
+ The problem treated will be under the following shape: 
+\begin_inset Formula 
+\begin{eqnarray}
+\underset{x,z}{\text{minimize}} &  & f(x)+g(z)\label{ADMM_pb}\\
+\text{subject to} &  & Ax+Bz=c,\nonumber 
+\end{eqnarray}
+
+\end_inset
+
+ with variables 
+\begin_inset Formula $x\in\mathbb{R}^{n}$
+\end_inset
+
+ and 
+\begin_inset Formula $z\in\mathbb{R}^{m}$
+\end_inset
+
+, where 
+\begin_inset Formula $A\in\mathbb{R}^{p\times n}$
+\end_inset
+
+, 
+\begin_inset Formula $B\in\mathbb{R}^{p\times m}$
+\end_inset
+
+, and 
+\begin_inset Formula $c\in\mathbb{R}^{p}$
+\end_inset
+
+.
+ The optimal value of the problem (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "ADMM_pb"
+
+\end_inset
+
+) is given by: 
+\begin_inset Formula 
+\begin{eqnarray}
+p^{\star}=\inf{f(x)+g(z)|Ax+Bz=c}
+\end{eqnarray}
+
+\end_inset
+
+ The Lagrangian becomes: 
+\begin_inset Formula 
+\begin{eqnarray}
+L_{rho}(x,y,z)=f(x)+g(z)+y^{T}(Ax+Bz-c)+(\rho/2)||Ax+Bz-c||_{2}^{2}
+\end{eqnarray}
+
+\end_inset
+
+ The ADMM consists in the following iterations: 
+\begin_inset Formula 
+\begin{eqnarray}
+x^{k+1} & := & \underset{x}{\text{argmin }}L_{\rho}(x,z^{k},y^{k})\\
+z^{k+1} & := & \underset{z}{\text{argmin }}L_{\rho}(x^{k+1},z,y^{k})\\
+y^{k+1} & := & y^{k}+\rho(Ax^{k+1}+Bz^{k+1}-c)
+\end{eqnarray}
+
+\end_inset
+
+ where 
+\begin_inset Formula $\rho>0$
+\end_inset
+
+.
+ We can see that 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $z$
+\end_inset
+
+ are updated in an alternating.
+\end_layout
+
+\begin_layout Subsection
+Logistic regression
+\end_layout
+
+\begin_layout Standard
+General optimization problem can be written in the form: 
+\begin_inset Formula 
+\begin{eqnarray}
+\text{minimize} &  & l(Ax-b)+r(x)
+\end{eqnarray}
+
+\end_inset
+
+ with 
+\begin_inset Formula $x\in\mathbb{R}^{n}$
+\end_inset
+
+, where 
+\begin_inset Formula $A\in\mathbb{R}^{m*n}$
+\end_inset
+
+ is the weight matrix, 
+\begin_inset Formula $m$
+\end_inset
+
+ being the number of documents in our problem, and 
+\begin_inset Formula $n$
+\end_inset
+
+ being the number of features.
+ Also the function 
+\begin_inset Formula $l:\mathbb{R}^{m}\to\mathbb{R}$
+\end_inset
+
+ is a convex loss function, and 
+\begin_inset Formula $r$
+\end_inset
+
+ a convex regularization function.
+ This function let us play on the sparsity of the results.
+\end_layout
+
+\begin_layout Standard
+We suppose that the loss function 
+\begin_inset Formula $l$
+\end_inset
+
+ is separable and can be written as: 
+\begin_inset Formula 
+\begin{eqnarray}
+l(Ax-b)=\sum_{i=1}^{m}\left\{ l_{i}(a_{i}^{T}x-b_{i})\right\} 
+\end{eqnarray}
+
+\end_inset
+
+ where 
+\begin_inset Formula $l_{i}:\mathbb{R}\to\mathbb{R}$
+\end_inset
+
+ is the loss for the 
+\begin_inset Formula $i^{th}$
+\end_inset
+
+ training set, 
+\begin_inset Formula $a_{i}\in\mathbb{R}^{n}$
+\end_inset
+
+ is the feature vector for the 
+\begin_inset Formula $i^{th}$
+\end_inset
+
+ example, and 
+\begin_inset Formula $b_{i}$
+\end_inset
+
+ the output of the corresponding example.
+ This property is very important for us because we want to create a distributed
+ algorithm.
+ But to be fully distributable, we need to choose a regularization function
+ 
+\begin_inset Formula $r$
+\end_inset
+
+ also separable, the common choice being 
+\begin_inset Formula $r(x)=\lambda||x||_{2}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+The goal of our problem is to classify, either 0 or 1.
+ Then the goal is to find a vector 
+\begin_inset Formula $x\in\mathbb{R}^{n}$
+\end_inset
+
+ and an offset 
+\begin_inset Formula $v\in\mathbb{R}$
+\end_inset
+
+ such that: 
+\begin_inset Formula 
+\begin{eqnarray}
+\text{sign}(a_{i}^{T}x+v)=b_{i}\label{condition}
+\end{eqnarray}
+
+\end_inset
+
+ holds for many examples.
+ We call 
+\begin_inset Formula $a_{i}^{T}x+v$
+\end_inset
+
+ a discriminant function.
+ Then the constraint (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "condition"
+
+\end_inset
+
+) can be written as 
+\begin_inset Formula $\mu_{i}>0$
+\end_inset
+
+ such that 
+\begin_inset Formula $\mu_{i}=b_{i}(a_{i}^{T}x+v)$
+\end_inset
+
+; 
+\begin_inset Formula $mu_{i}$
+\end_inset
+
+ is called the margin.
+ We generally write the loss functions in function of the margin.
+ Then in our case we have: 
+\begin_inset Formula 
+\begin{eqnarray}
+l_{i}(\mu_{i})=l_{i}(b_{i}(a_{i}^{T}x+v))
+\end{eqnarray}
+
+\end_inset
+
+ Then the loss functions should be positive and decreasing for negative
+ arguments and zero or small for positive arguments.
+ Indeed, by this, we penalize when there is an error in the classification,
+ that is to say when the margin is negative.
+ Then in order to determine the vector 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $v$
+\end_inset
+
+ we would like to minimize the following: 
+\begin_inset Formula 
+\begin{eqnarray}
+\frac{1}{m}\sum_{i=1}^{m}\left\{ l_{i}(b_{i}(a_{i}^{T}x+v))+r(w)\right\} 
+\end{eqnarray}
+
+\end_inset
+
+ For our problem, the logistic loss function 
+\begin_inset Formula $\log(1+\exp(-\mu_{i}))$
+\end_inset
+
+ is well adapted.
+ For the ADMM algorithm, we have the following: 
+\begin_inset Formula 
+\begin{eqnarray}
+x_{i}^{k+1} & := & \underset{x_{i}}{\text{argmin}}(l_{i}(A_{i}x_{i})+(\rho/2)||x_{i}-z^{k}+u_{i}^{k}||_{2}^{2})\label{ADMM_algo}\\
+z^{k+1} & := & S_{\lambda/(\rho N)}(\overline{x}^{k+1}+\overline{u}^{k})\\
+u_{i}^{k+1} & := & u_{i}^{k}+x_{i}^{k+1}-z^{k+1}
+\end{eqnarray}
+
+\end_inset
+
+ where 
+\begin_inset Formula $\overline{x}^{k}$
+\end_inset
+
+ and 
+\begin_inset Formula $\overline{u}^{k}$
+\end_inset
+
+ are averages of 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+ and 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+ over all the training sets, at time 
+\begin_inset Formula $\texttt{k}$
+\end_inset
+
+.
+ We notice as well that the 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+-update involve an 
+\begin_inset Formula $l_{2}$
+\end_inset
+
+ regularized logistic regression problem that can be solved by algorithms
+ like L-BFGS.
+ For our project, we decided to use the gradient descent and the accelerated
+ gradient descent methods.
+ 
+\end_layout
+
+\begin_layout Subsection
+Collaborative Filtering
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:Collaborative-Filtering"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+While ADMM is a more general framework that permits parallelization in numerous
+ ways, we exploit a very particular structure in our problem.
+ The crux of our problem is the large number of samples.
+ For example, in the Reuters corpus data set 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Lewis2004"
+
+\end_inset
+
+, there are only 40,000 features in the IDF, while there are over 800,000
+ sample documents.
+ Such a large number of samples makes computation on a single small machine
+ very expensive and difficult.
+ Collaborative filtering 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Boyd2010a"
+
+\end_inset
+
+ gives us a mechanism for splitting the data set across the number of samples.
+\end_layout
+
+\begin_layout Standard
+If we take for example that we penalize each record in an additive manner
+ such that we can express our objective as:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\min_{x}\sum_{i}f_{i}\left(x\right)
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+where 
+\begin_inset Formula $f_{i}$
+\end_inset
+
+ is a function of the estimated feature vector 
+\begin_inset Formula $x$
+\end_inset
+
+ and the data associated with record 
+\begin_inset Formula $i$
+\end_inset
+
+.
+ Then we may equivalently write this problem as:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\sum_{i}\min_{x_{i}}f_{i}\left(x_{i}\right):x_{i}-z=0\forall i
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Clearly, now the objective function is separable across all samples 
+\begin_inset Formula $i$
+\end_inset
+
+, except for the coupling due to the 
+\begin_inset Formula $z$
+\end_inset
+
+ constraints.
+ The 
+\begin_inset Formula $z$
+\end_inset
+
+ value acts as 
+\emph on
+global consensus 
+\emph default
+variable, since it penalizes local deviations of 
+\begin_inset Formula $x_{i}$
+\end_inset
+
+ values from one another.
+ One can see the approach of collaborative filtering as decoupling the sample
+ losses to allow myopic minimization, while penalizing such decouplings
+ via a collecting and comparing step.
+ In the framework of ADMM, such concepts can easily be turned into an iterative
+ algorithm.
+\end_layout
+
+\begin_layout Standard
+In our specific problem, we use collaborative filtering to cluster the document
+ data into a fixed number of batches.
+ Then, these individual batches can be mapped to all the slave nodes discussed
+ in 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "sec:Cluster-Architecture"
+
+\end_inset
+
+, which greatly reduces the required resources for each individual node.
+ The ADMM collaborative filtering algorithm in addition has the nice property
+ that the master node, which acts as the 
+\emph on
+fusion center
+\emph default
+, does not need any knowledge of data set.
+ Rather, it only acts as an averaging mechanism of the slave nodes.
+ Therefore, the entire data set can be completely distributed, and never
+ needs to be collected at a single node.
+\end_layout
+
+\begin_layout Subsection
+Rare events
+\begin_inset CommandInset label
+LatexCommand label
+name "Rare events"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+In our problem, we deal with rare events represented by the positive outputs
+ in the vector 
+\begin_inset Formula $b$
+\end_inset
+
+.
+ Indeed, the probability to get a positive value is very small.
+ That means that there is not many positive outputs inside the training
+ sets we use to solve our problem; that explains why we have bad success
+ rates over the positive outputs.
+\end_layout
+
+\begin_layout Standard
+In his paper, King 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "King2001"
+
+\end_inset
+
+ proposed to use a bias correction in parameters estimation but also in
+ the probability estimation of these rare events.
+ This is complicated to realize and we did not have time to take it into
+ account in our project.
+\end_layout
+
+\begin_layout Section
+Reuters Data Set and Sparse Logistic Regression
+\end_layout
+
+\begin_layout Standard
+Lewis et al 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Lewis2004"
+
+\end_inset
+
+ detail a data set pertaining to Reuters news stories.
+ The data set consists of over 800,000 news stories that were manually classifie
+d as belonging to or not belonging to over 100 news topics.
+ The report in 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Lewis2004"
+
+\end_inset
+
+ goes into grave detail about the data collection and classification process,
+ which includes a discussion about how humans modified an automated assignment
+ of stories to topics.
+\end_layout
+
+\begin_layout Standard
+The text content of the individual documents was converted into an 
+\emph on
+Inverse Document Frequency
+\emph default
+ value for a dictionary of over 40,000 words that existed in the corpus.
+ Such a representation leads to a very sparse 
+\begin_inset Formula $A$
+\end_inset
+
+ matrix (# samples vs.
+ # dictionary words), since word frequency follows a power law distribution.
+ Additionally, topic membership is also sparse, making our 
+\begin_inset Formula $b$
+\end_inset
+
+ vector sparse, since most documents would only belong to a couple of topics
+ out of 100.
+\end_layout
+
+\begin_layout Standard
+
+\series bold
+\emph on
+Implementation Note:
+\series default
+\emph default
+ Exploiting the sparsity of the data was necessary for the success of our
+ algorithm.
+ For this reason, all data used in this study had a sparse vector representation.
+ This dramatically reduced the data representation size.
+ Additionally, we sought out a java or scala library that would enable sparse
+ matrix calculations.
+ The 
+\begin_inset CommandInset href
+LatexCommand href
+name "Colt library"
+target "http://acs.lbl.gov/software/colt/"
+
+\end_inset
+
+ had such libraries available, and although the API for its usage was rather
+ verbose, the library was ultimately selected.
+ To be more explicit, we utilized the 
+\begin_inset CommandInset href
+LatexCommand href
+name "Parallel Colt"
+target "https://sites.google.com/site/piotrwendykier/software/parallelcolt"
+
+\end_inset
+
+ library, which builds in parallelization to matrix operation automatically
+ under the hood.
+\end_layout
+
+\begin_layout Standard
+While it is most definitely possible to use all of the topic classifications
+ in a regression analysis to predict the classification of a single topic,
+ we instead focus our problem on determining whether the IDF of a document
+ gives enough information to be able to classify that document into a particular
+ topic.
+ This greatly simplifies our problem.
+\end_layout
+
+\begin_layout Standard
+In the report by Lewis 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Lewis2004"
+
+\end_inset
+
+, the group analyzes the data set using 
+\emph on
+Support Vector Machines (SVM), 
+\emph default
+as a method for regression.
+ We take a slightly different approach in our problem by solving 
+\emph on
+sparse logistic regression (SLR)
+\emph default
+.
+ Ignoring the 
+\emph on
+sparse 
+\emph default
+modifier, these problems are very similar, as SVM uses a hinge loss function,
+ while SLR uses a logistic loss function.
+ A convenience of our analysis is that the Boyd paper 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Boyd2010a"
+
+\end_inset
+
+ explicitly discusses how one can approach SLR within the ADMM framework.
+\end_layout
+
+\begin_layout Standard
+One key interesting point in our approach is to make our feature solution
+ vector sparse.
+ What this practically means for our specific problem, is that we have a
+ prior belief that only a handful of the 40,000 total words are necessary
+ for predicting whether a document belongs in a topic or not.
+ The output of the SLR solution can then be interpretable by humans.
+ Such benefits of this are using this data for selling ads based on particular
+ news stories, or having users search by relevant words, rather than the
+ actual topic name.
+ A non-sparse solution vector makes displaying the optimization results
+ with some sort of user interface much more difficult and harder to interpret.
+\end_layout
+
+\begin_layout Paragraph
+Synthetic Dataset
+\end_layout
+
+\begin_layout Standard
+In order to test our algorithms on reliable and invariant datasets, we developed
+ code to be able to generate and store randomly created, sparse data sets.
+ This is discussed in more detail in 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "sec:experiments"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Section
+Different software frameworks
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset label
+LatexCommand label
+name "Different software frameworks"
+
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Subsection
+Map-Reduce architecture
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset label
+LatexCommand label
+name "Map-Reduce architecture"
+
+\end_inset
+
+ MapReduce 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Dean2008"
+
+\end_inset
+
+ is a framework for processing highly distributable problems across huge
+ datasets using a large number of computers, collectively referred to as
+ a cluster.
+ In this framework two main steps appear:
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Quotes eld
+\end_inset
+
+Map
+\begin_inset Quotes erd
+\end_inset
+
+ step: the master computer divides in several sub-problems and send them
+ to the other computers in the cluster.
+ Once these worker computers have solved the sub-problem, they send back
+ the solution to the master computer.
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Quotes eld
+\end_inset
+
+Reduce
+\begin_inset Quotes erd
+\end_inset
+
+ step: the master computer collects the results of all the sub-problems
+ and combines them in a specific way to obtain a solution to the original
+ main problem.
+\end_layout
+
+\begin_layout Standard
+Provided each mapping operation is independent of the others, all maps can
+ be performed in parallel.
+\end_layout
+
+\begin_layout Subsection
+Hadoop
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset label
+LatexCommand label
+name "Hadoop"
+
+\end_inset
+
+ Hadoop is a free Java framework that supports distributed applications.
+ It enables applications to work with thousands of computational independent
+ computers and petabytes of data.
+ A complete MapReduce algorithm can be used in this framework.
+ 
+\end_layout
+
+\begin_layout Subsection
+Spark
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset label
+LatexCommand label
+name "Spark"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Spark 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Zaharia2010"
+
+\end_inset
+
+ is a cluster computing framework built on top of Mesos 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Hindman2011"
+
+\end_inset
+
+.
+ As well as Hadoop, it supports distributed applications.
+ The language used is Scala.
+ Spark's programming model is based on two constructs: parallel loops over
+ 
+\begin_inset Quotes eld
+\end_inset
+
+distributed datasets
+\begin_inset Quotes erd
+\end_inset
+
+, and a limited set of types of shared variables that can be accessed from
+ tasks running on different machines.
+ This is the main advantage compared to Hadoop and the reason why we want
+ to use this framework.
+ Thanks to this architecture, we will be able to compute big calculations
+ only once, and then the results will be shared with all the relevant computers.
+ The framework Spark uses what is called Resilient distributed datasets
+ (RDDs).
+ Their main characteristics are: 
+\end_layout
+
+\begin_layout Itemize
+RDDs are composed of immutable data split across the cluster and that can
+ be rebuild if a part of it is lost 
+\end_layout
+
+\begin_layout Itemize
+data can be created or modified thanks to 
+\begin_inset Quotes eld
+\end_inset
+
+transformation
+\begin_inset Quotes erd
+\end_inset
+
+ type methods 
+\end_layout
+
+\begin_layout Itemize
+we can also cache data in the cluster, that is to say, we save the result
+ of a calculation.
+ Then, we do not need to recompute each results we already calculated, each
+ time we need them.
+ 
+\end_layout
+
+\begin_layout Standard
+Their exists two different types of operations supported by RDDs: the transforma
+tion methods and the action methods.
+ 
+\shape smallcaps
+Transformations
+\shape default
+ return a new dataset rather than 
+\shape smallcaps
+actions
+\shape default
+ return a value to the driver program.
+ 
+\shape smallcaps
+Transformations
+\shape default
+ in Spark are lazy.
+ That means that the result is not computed right away.
+ The system will remember the different transformations called and it is
+ only when an action function is called that the calculation are done.
+ Spark is more efficient thanks to this process.
+ When transformations become lazy, then many optimization steps may take
+ place.
+ For instance, if a series of 
+\begin_inset Formula $\texttt{map}$
+\end_inset
+
+ transformations leads to many intermediate calculations that take large
+ amounts of memory, then lazy evaluation can reduce this cost by storing
+ intermediate calculations across all iterates.
+ Such a style of programming suits the 
+\emph on
+RDD
+\emph default
+ world well.
+\end_layout
+
+\begin_layout Section
+Algorithm
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset label
+LatexCommand label
+name "Algorithm"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The ADMM method is a recursive method.
+ Also each iteration of 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+, 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+ and 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+ are interdependent, that is to say, we need 
+\begin_inset Formula $z^{k}$
+\end_inset
+
+ and 
+\begin_inset Formula $u^{k}$
+\end_inset
+
+ to compute 
+\begin_inset Formula $x^{k+1}$
+\end_inset
+
+, we need all the 
+\begin_inset Formula $x^{k+1}$
+\end_inset
+
+ and 
+\begin_inset Formula $u^{k}$
+\end_inset
+
+ to compute 
+\begin_inset Formula $z^{k+1}$
+\end_inset
+
+, and we need 
+\begin_inset Formula $x^{k+1}$
+\end_inset
+
+ and 
+\begin_inset Formula $z^{k+1}$
+\end_inset
+
+ to compute 
+\begin_inset Formula $u^{k+1}$
+\end_inset
+
+.
+ This makes the code hard because of the nature of the RDDs.
+ Indeed they are composed of immutable variable while we need to store each
+ iteration of 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+, 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+ and 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+.
+ In our code, we used the method 
+\begin_inset Formula $\texttt{cache()}$
+\end_inset
+
+ for our RDDs.
+ Indeed, because they gather all our data (samples and outputs we are working
+ on), we did not want to compute again these RDDs each time we call them.
+\end_layout
+
+\begin_layout Standard
+The procedure followed to create these RDDs are a succession of Spark transforma
+tions and ends with a 
+\begin_inset Formula $\texttt{reduce}$
+\end_inset
+
+ method.
+ We know that because of the laziness of Spark transformation, values are
+ not computed right away, just the sequence of transformations is save.
+ It is only when we call an action function as 
+\begin_inset Formula $\texttt{reduce}$
+\end_inset
+
+ that the computations are really done.
+ We are using the 
+\begin_inset Formula $\texttt{cache()}$
+\end_inset
+
+ method right after calling reduce.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+placement t
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Graphics
+	filename masterslavewithadmm.pdf
+	height 6cm
+	clip
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Algorithm fitting cluster's structure
+\begin_inset CommandInset label
+LatexCommand label
+name "Cluster structure"
+
+\end_inset
+
+ 
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "Cluster structure"
+
+\end_inset
+
+ shows where the different variable are stored into the cluster.
+ So we notice that each slave has a version of 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+, 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+, and 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+.
+ So we understand that we can update 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+ on each slave from the 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+ and 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+ values stored into them.
+ We can do the same when we want to update 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+, by using the 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+ and 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+ stored in the computer slave.
+ So we understand that the two previous updates can be done on each computer
+ slave.
+ The method to update 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+, however, is different.
+ In the ADMM method, we notice that we need do compute the average of all
+ 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+ and all 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+ found on each slice.
+ Then we had to use the master computer to update 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+.
+ The method is the following: first the master computer collect all the
+ value of 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+ and 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+, then it runs a 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+-update method we created, and finally we broadcasted the updated value
+ of 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+.
+ The broadcast step is necessary to have the same value on 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+ on each computer slave.
+ A method already exist on Spark in order to realize this broadcast action.
+ But it was easier for use to create our own method.
+ It would be interesting to use this method in the future.
+ 
+\end_layout
+
+\begin_layout Subsection
+xUpdate
+\end_layout
+
+\begin_layout Standard
+The xUpdate equation is given by (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "xUpdate"
+
+\end_inset
+
+).
+ 
+\begin_inset Formula 
+\begin{eqnarray}
+x_{i}^{k+1} & := & \underset{x_{i}}{\text{argmin}}(l_{i}(A_{i}x_{i})+(\rho/2)||x_{i}-z^{k}+u_{i}^{k}||_{2}^{2})\label{xUpdate}
+\end{eqnarray}
+
+\end_inset
+
+ As said before, only Spark transformation functions can be used here inside
+ each slave computer in order to update 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+.
+ We notice that the 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+ update is obtained by solving an unconstrained optimization problem.
+ To do so, we used two different methods: traditional gradient descent method
+ with backtracking line search algorithm and an accelerated gradient descent
+ method using backtracking as well 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Andrei2006"
+
+\end_inset
+
+.
+ A second-order Hessian-based method was attempted for our subproblem, but
+ the cost of computing the Hessian was a limiting factor.
+ A quasi-Newton approach such as L-BFGS 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Liu1989"
+
+\end_inset
+
+ would suit this sub-problem well, but time did not permit us to implement
+ this method and compare.
+\end_layout
+
+\begin_layout Subsection
+zUpdate
+\end_layout
+
+\begin_layout Standard
+The zUpdate equation is given by (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "zUpdate"
+
+\end_inset
+
+).
+ 
+\begin_inset Formula 
+\begin{eqnarray}
+z^{k+1} & := & S_{\lambda/(\rho N)}(\overline{x}^{k+1}+\overline{u}^{k})\label{zUpdate}
+\end{eqnarray}
+
+\end_inset
+
+ In order to give an example on how the scala code is created, Listing 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "zUpdate"
+
+\end_inset
+
+ shows how 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+ is updated at each iteration:
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset include
+LatexCommand lstinputlisting
+filename "zUpdate.scala"
+lstparams "basicstyle={\\ttfamily\\footnotesize},breaklines=true,caption={Z Update Pseudo-code},label={zUpdate},language=Java"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The first step of this code is to create an RDD called 
+\begin_inset Formula $\texttt{xLS}$
+\end_inset
+
+.
+ As we can see thanks to the 
+\begin_inset Formula $\texttt{map}$
+\end_inset
+
+ method, 
+\begin_inset Formula $\texttt{xLS}$
+\end_inset
+
+ is a RDD composed of elements of type 
+\begin_inset Formula $(x^{k+1},z,u)$
+\end_inset
+
+, of all the slices.
+ We have to remember that the 
+\begin_inset Formula $\texttt{map}$
+\end_inset
+
+ method is part of the action functions.
+ It means that this method will 
+\begin_inset Quotes eld
+\end_inset
+
+create
+\begin_inset Quotes erd
+\end_inset
+
+ a result at the end.
+ It is different from the transformation functions that just modify variables
+ inside an object.
+ Then, the most important part of this code is to cache the RDD we just
+ created.
+ Indeed, if we do not do this, the code will have to compute again the data
+ each time we call 
+\begin_inset Formula $\texttt{xLS}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+Then comes the zUpdate part.
+ First we create a value 
+\begin_inset Quotes eld
+\end_inset
+
+reduced
+\begin_inset Quotes erd
+\end_inset
+
+ which consists in copying the 
+\begin_inset Formula $x$
+\end_inset
+
+ value and then summing with the 
+\begin_inset Formula $u$
+\end_inset
+
+ value.
+ We do it for all slices as we see with the 
+\begin_inset Formula $\texttt{map}$
+\end_inset
+
+ method.
+ The following 
+\begin_inset Formula $\texttt{reduce}$
+\end_inset
+
+ method sum all these values into one.
+ Then we divide by the number of slices 
+\begin_inset Formula $\texttt{N}$
+\end_inset
+
+ (called here 
+\begin_inset Formula $\texttt{nSlices}$
+\end_inset
+
+).
+ And then we use the function 
+\begin_inset Formula $\texttt{shrinkage}$
+\end_inset
+
+ that represents 
+\begin_inset Formula $S_{\lambda/(\rho N)}$
+\end_inset
+
+ in the ADMM algorithm (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "ADMM_algo"
+
+\end_inset
+
+).
+ Because we used a 
+\begin_inset Formula $\texttt{map}$
+\end_inset
+
+ method, it will create a value.
+ Then, in order to broadcast these with our original RDD, we had to create
+ a method called 
+\begin_inset Formula $\texttt{zUpdateEnv}$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+In order to update the 
+\begin_inset Formula $\texttt{z}$
+\end_inset
+
+ value, we could have use the accumulator object that exists in Spark.
+ The accumulator would have been useful to realize the summation part over
+ 
+\begin_inset Formula $\texttt{x}$
+\end_inset
+
+ and 
+\begin_inset Formula $\texttt{u}$
+\end_inset
+
+.
+ Accumulators can only be used through an associative operation but we could
+ not create this type of method for the vectors of the cern library.
+ That is why we did not use the accumulators.
+\end_layout
+
+\begin_layout Subsection
+uUpdate
+\end_layout
+
+\begin_layout Standard
+The uUpdate equation is given by (
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "uUpdate"
+
+\end_inset
+
+).
+ 
+\begin_inset Formula 
+\begin{eqnarray}
+u_{i}^{k+1} & := & u_{i}^{k}+x_{i}^{k+1}-z^{k+1}\label{uUpdate}
+\end{eqnarray}
+
+\end_inset
+
+ For that part we did not need to create any new variable.
+ We just needed to create a method 
+\begin_inset Formula $\texttt{uUpdateEnv}$
+\end_inset
+
+ that is a transformation function.
+ It will update the current 
+\begin_inset Formula $u$
+\end_inset
+
+ value using 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $z$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsection
+Stopping criteria
+\end_layout
+
+\begin_layout Standard
+The stopping criteria is based on the residuals 
+\begin_inset Formula $r^{k}$
+\end_inset
+
+ an 
+\begin_inset Formula $s^{k}$
+\end_inset
+
+ defined as: 
+\begin_inset Formula 
+\begin{eqnarray*}
+r^{k} & = & x^{k}-z^{k}\\
+s^{k} & = & z^{k+1}-z^{k}
+\end{eqnarray*}
+
+\end_inset
+
+ It has been shown that when these two residuals are small, the objective
+ sub-optimality, 
+\begin_inset Formula $f(x^{k})+(z^{k})-p^{\star}$
+\end_inset
+
+, also must be small.
+ We have th following inequality: 
+\begin_inset Formula 
+\begin{eqnarray*}
+f(x^{k})+(z^{k})-p^{\star}\leq-(y^{k})^{T}r^{k}+(x^{k}-x^{\star})^{T}s^{k}
+\end{eqnarray*}
+
+\end_inset
+
+ Because we do not know the optimal value 
+\begin_inset Formula $x^{\star}$
+\end_inset
+
+, we cannot use the previous equation as stopping criteria.
+ But we can guess a bond 
+\begin_inset Formula $d$
+\end_inset
+
+ such that 
+\begin_inset Formula $||x^{k}-x^{\star}||\leq d$
+\end_inset
+
+.
+ Then we get now: 
+\begin_inset Formula 
+\begin{eqnarray*}
+f(x^{k})+(z^{k})-p^{\star}\leq||y^{k}||_{2}||r^{k}||_{2}+d||s^{k}||_{2}
+\end{eqnarray*}
+
+\end_inset
+
+ Then we can create two parameters 
+\begin_inset Formula $\epsilon^{pri}$
+\end_inset
+
+ and 
+\begin_inset Formula $\epsilon^{dual}$
+\end_inset
+
+ to impose the primal and the dual residuals to be small, i.e., 
+\begin_inset Formula 
+\begin{eqnarray*}
+||r^{k}||_{2} & \leq & \epsilon^{pri}\\
+||s^{k}||_{2} & \leq & \epsilon^{dual}
+\end{eqnarray*}
+
+\end_inset
+
+ where 
+\begin_inset Formula $\epsilon^{pri}\geq0$
+\end_inset
+
+ and 
+\begin_inset Formula $\epsilon^{dual}\geq0$
+\end_inset
+
+.
+ These tolerances can be chosen such that: 
+\begin_inset Formula 
+\begin{eqnarray*}
+\epsilon^{pri} & = & \sqrt{n+1}\epsilon^{abs}+\epsilon^{rel}max{||x^{k}||_{2},||z^{k}||_{2}}\\
+\epsilon^{dual} & = & \sqrt{n+1}\epsilon^{abs}+\epsilon^{rel}||\rho u^{k}||_{2}
+\end{eqnarray*}
+
+\end_inset
+
+ where 
+\begin_inset Formula $\epsilon^{abs}>0$
+\end_inset
+
+ is an absolute tolerance and 
+\begin_inset Formula $\epsilon^{rel}>0$
+\end_inset
+
+ is a relative tolerance.
+ We have factors 
+\begin_inset Formula $\sqrt{n+1}$
+\end_inset
+
+ because the 
+\begin_inset Formula $l_{2}$
+\end_inset
+
+ norms are in 
+\begin_inset Formula $\mathbb{R}^{n+1}$
+\end_inset
+
+.
+ A reasonable value for 
+\begin_inset Formula $\epsilon^{rel}$
+\end_inset
+
+ might be 
+\begin_inset Formula $10^{-3}$
+\end_inset
+
+ or 
+\begin_inset Formula $10^{-4}$
+\end_inset
+
+, while the absolute stopping criterion depends on the scale of the typical
+ variable values.
+\end_layout
+
+\begin_layout Subsection
+Map Environment Concept
+\end_layout
+
+\begin_layout Standard
+
+\emph on
+RDDs
+\emph default
+ are composed of immutable variables.
+ But, because of the nature of the ADMM algorithm, we need to update the
+ value of 
+\begin_inset Formula $x$
+\end_inset
+
+, 
+\begin_inset Formula $z$
+\end_inset
+
+ and 
+\begin_inset Formula $u$
+\end_inset
+
+ at each iteration.
+ Then, to be able to update these variables, we had to create sub-
+\emph on
+RDD
+\emph default
+s all pointing to the same variable in a main 
+\emph on
+RDD
+\emph default
+, existing in each slice of our global data set.
+ So, when we update our three variables 
+\begin_inset Formula $x$
+\end_inset
+
+, 
+\begin_inset Formula $z$
+\end_inset
+
+ and 
+\begin_inset Formula $u$
+\end_inset
+
+ in each slice, we actually create new 
+\emph on
+RDD
+\emph default
+s.
+ This is the point of 
+\begin_inset Formula $\texttt{RRD[DataEnv]}$
+\end_inset
+
+s which represents the main 
+\emph on
+RDDs
+\emph default
+ of each slice, and 
+\begin_inset Formula $\texttt{RRD[LearnEnv]}$
+\end_inset
+
+s which are the sub-
+\emph on
+RDD
+\emph default
+s related a 
+\begin_inset Formula $\texttt{RRD[DataEnv]}$
+\end_inset
+
+s in each slice.
+ It is best to think of these constructs as creating isolated 
+\emph on
+environments
+\emph default
+ for the computation of each individual slice to feel as if it had it's
+ own scala environment to live within.
+\end_layout
+
+\begin_layout Section
+Cluster Architecture
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:Cluster-Architecture"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+To implement the iterative map-reduce 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Dean2008"
+
+\end_inset
+
+ approach to ADMM, we use a traditional master-slave cluster architecture.
+ Specifically, a single node, named the 
+\begin_inset Quotes eld
+\end_inset
+
+master
+\begin_inset Quotes erd
+\end_inset
+
+, coordinates the activities of a set of machines, called the 
+\begin_inset Quotes eld
+\end_inset
+
+slaves
+\begin_inset Quotes erd
+\end_inset
+
+, to perform independent tasks.
+ This architecture is depicted in 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "fig:masterslave"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Graphics
+	filename /Users/jdr/Desktop/admmpaper/masterslave.pdf
+	width 5in
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Master/ Slave Architecture
+\end_layout
+
+\end_inset
+
+
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:masterslave"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The rest of this section will discuss the particulars of this architecture
+ in how it pertains to running the ADMM algorithm in master/slave manner.
+\end_layout
+
+\begin_layout Subsection
+Amazon EC2 and S3
+\end_layout
+
+\begin_layout Standard
+Amazon provides developers with a set of web services that abstract away
+ the difficulties of hardware and networking setup for deploying software.
+ The first service we use is Amazon Elastic Cloud Compute (EC2).
+ EC2 allows for temporary renting of computing nodes with IP addresses for
+ 
+\emph on
+ssh
+\emph default
+'ing into the machines.
+ We use a full Linux environment on each one of our EC2 nodes.
+ The master and all slaves are running different instance 
+\emph on
+types
+\emph default
+.
+ An instance type defines the specifications of the underlying hardware.
+ The developer can choose the amount of RAM, hard disk space, cores, etc...
+ We tested different instance types for the slave nodes to see what the
+ performance benefits are for upgrading RAM and CPU.
+ This is discussed in Section 
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:experiments"
+
+\end_inset
+
+.
+ 
+\end_layout
+
+\begin_layout Standard
+In addition, it is imperative for the running time of our experiments to
+ have a fast data connection to download the data sets.
+ Amazon provides a database service called Scalable Storage Service (S3).
+ S3 gives the developer a set of buckets to store blobs under key values.
+ Then, these keys can be converted into a publicly available web url.
+ The master node on EC2 then downloads the dataset from the S3 service.
+ Since both EC2 and S3 reside within the same physical network, the data
+ transfer speeds are much faster than if we had scp'ed the data directly
+ from our own machines.
+ An additional bonus is that Amazon allows data transfer from S3 to EC2
+ nodes free of charge.
+\end_layout
+
+\begin_layout Subsection
+Mesos Distributed Computing Platform
+\end_layout
+
+\begin_layout Standard
+The Spark 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Zaharia2010"
+
+\end_inset
+
+ software was developed with the Mesos 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Hindman2011"
+
+\end_inset
+
+ computing platform in mind.
+ Mesos provides an abstraction level to developers that enables one to write
+ distributed software without worrying about the underlying networking layer.
+ Such a software package allows Spark to exist and to be written in a concise
+ manner.
+ This report does not discuss Mesos in depth, but rather acknowledges it
+ as a necessary software layer to run spark on the EC2 infrastructure.
+\end_layout
+
+\begin_layout Subsection
+Hadoop and HDFS
+\end_layout
+
+\begin_layout Standard
+Hadoop is an open source software project that runs on the Java Virtual
+ Machine (JVM).
+ Hadoop was designed to provide similar functionality to Mesos, yet the
+ Spark project is able to use the Hadoop software in conjunction with Mesos.
+ More specifically, we use the Hadoop Distributed File System (HDFS) in
+ our project.
+ HDFS is based off a similar system created by Google called the Google
+ File System (GFS) 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Ghemawat2003"
+
+\end_inset
+
+.
+ One of the main sources of computation time in a large-scale optimization
+ problem would be the serial process of loading in the data set from the
+ hard disk.
+ If the same set of data is going to be analyzed many times on the same
+ cluster, then it would be beneficial to use a distributed system for loading
+ the data.
+ HDFS allows the user to store a set of data as a set of records (which
+ can be thought of as lines in a file).
+ Then, HDFS loads this data on many nodes simultaneously.
+\end_layout
+
+\begin_layout Standard
+For our ADMM algorithm, we must cluster these records in some fashion.
+ The distributed nature of loading by HDFS makes partitioning the data into
+ clusters not a trivial task.
+ We overcome this problem by giving each record an ID.
+ Then clusters are created by doing a 
+\begin_inset Quotes eld
+\end_inset
+
+groupBy
+\begin_inset Quotes erd
+\end_inset
+
+ call on the modulus of the ID and the number of clusters.
+\end_layout
+
+\begin_layout Subsection
+Work Flow
+\end_layout
+
+\begin_layout Standard
+For each running of the distributed algorithm, there exists a sequence of
+ steps that are reoccurring.
+\end_layout
+
+\begin_layout Enumerate
+Develop new code for testing
+\end_layout
+
+\begin_layout Enumerate
+Compile new code
+\end_layout
+
+\begin_layout Enumerate
+Lease new set of servers
+\end_layout
+
+\begin_layout Enumerate
+Start up servers with Mesos, Spark, HDFS
+\end_layout
+
+\begin_layout Enumerate
+Pull in data set
+\end_layout
+
+\begin_layout Enumerate
+Deploy local optimization code to master
+\end_layout
+
+\begin_layout Enumerate
+Deploy master code to slaves
+\end_layout
+
+\begin_layout Enumerate
+Launch optimization program
+\end_layout
+
+\begin_layout Enumerate
+Save results of program to file
+\end_layout
+
+\begin_layout Enumerate
+Rsync the remote results file to local computer
+\end_layout
+
+\begin_layout Enumerate
+Analyze results in convenient scripting language X
+\end_layout
+
+\begin_layout Enumerate
+Destroy cluster
+\end_layout
+
+\begin_layout Standard
+Steps 3 and 4 were accomplished by heavily modifying a helper script provided
+ by the Spark project.
+ All other steps required many sub-commands and deployment techniques that
+ were hand-crafted by the members of this team.
+\end_layout
+
+\begin_layout Subsection
+Local Deployment Toolset
+\end_layout
+
+\begin_layout Standard
+In order to make such a lengthy process for the workflow manageable, it
+ became necessary to develop a set of high level commands to devise experiments
+ and easily deploy and analyze the results.
+ Firstly, the serialization of statistics from the optimization program
+ was automated via a 
+\emph on
+StatTracker
+\emph default
+ class within the scala code we developed, which could then be conveniently
+ serialized to JSON.
+ The prevalence of JSON recently made the reading of this data possible
+ in just about any language.
+ We used python and MATLAB specifically for our analysis.
+ Additionally, the operating system-level commands were wrapped nicely into
+ a set of easy-to-handle python functions, which made experiment deployment
+ for the entire 12 step process above a matter of a handful of lines of
+ python.
+ An example experiment script is given in Listing 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "exexper"
+
+\end_inset
+
+.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset include
+LatexCommand lstinputlisting
+filename "exampleexperiment.py"
+lstparams "basicstyle={\\ttfamily\\footnotesize},breaklines=true,caption={Example experiment code in high-level python toolset language developed by team},label={exexper},language=Python"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+Experiments
+\begin_inset CommandInset label
+LatexCommand label
+name "sec:experiments-1"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Local experiments
+\end_layout
+
+\begin_layout Subsubsection
+Synthetic data creation
+\end_layout
+
+\begin_layout Standard
+We followed the same procedure as in 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Boyd2010a"
+
+\end_inset
+
+ for generating the synthetic data set.
+ For testing on local machine we generated an instance with 
+\begin_inset Formula $m=700$
+\end_inset
+
+ documents and 
+\begin_inset Formula $n=50$
+\end_inset
+
+ features.
+ The 
+\begin_inset Formula $m$
+\end_inset
+
+ documents are distributed among 
+\begin_inset Formula $N=5$
+\end_inset
+
+ slices, so each subsystem has 
+\begin_inset Formula $140$
+\end_inset
+
+ training documents.
+ Each feature vector 
+\begin_inset Formula $a_{i}$
+\end_inset
+
+ was generated to have approximately 
+\begin_inset Formula $70$
+\end_inset
+
+ nonzero features (a 
+\begin_inset Formula $10\%$
+\end_inset
+
+ sparsity), each sampled independently from a standard normal distribution.
+ The "true" weight vector 
+\begin_inset Formula $w_{true}\in\mathbb{R}_{n}$
+\end_inset
+
+ has 25 nonzero values (a 
+\begin_inset Formula $50\%sparsity$
+\end_inset
+
+) and these entries, along with the "true" intercept 
+\begin_inset Formula $v_{true}$
+\end_inset
+
+, were sampled independently from a standard normal distribution.
+ Then we generate the labels by 
+\begin_inset Formula $b_{i}=\text{sign}(a_{i}^{T}w_{true}+v_{true}+v_{i})$
+\end_inset
+
+ where 
+\begin_inset Formula $v_{i}$
+\end_inset
+
+~
+\begin_inset Formula $\mathcal{N}(0,0.1)$
+\end_inset
+
+.
+ We use 
+\begin_inset Formula $\lambda=0.1$
+\end_inset
+
+, 
+\begin_inset Formula $\rho=1$
+\end_inset
+
+ as default values.
+ As done in 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "Boyd2010a"
+
+\end_inset
+
+ we used 
+\begin_inset Formula $\epsilon^{abs}=10^{-4}$
+\end_inset
+
+ and 
+\begin_inset Formula $\epsilon^{rel}=10^{-2}$
+\end_inset
+
+.
+ Although these last two values should be tuned but a quick analysis showed
+ that the results were not too sensitive to them.
+ It should be noted that the proportion of positive labels randomly generated
+ was around 
+\begin_inset Formula $11\%$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsubsection
+Varying parameters
+\end_layout
+
+\begin_layout Standard
+In this subsection we want to test the following changes in the problem's
+ parameters (while fixing the other ones) : 
+\end_layout
+
+\begin_layout Itemize
+number of slices : 
+\begin_inset Formula $1$
+\end_inset
+
+, 
+\begin_inset Formula $5$
+\end_inset
+
+ and 
+\begin_inset Formula $10$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Formula $\lambda$
+\end_inset
+
+ : 
+\begin_inset Formula $0.001,0.01,0.1\text{ and }1$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+\begin_inset Formula $\rho$
+\end_inset
+
+ : 
+\begin_inset Formula $0.01,0.1,1,10$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Paragraph
+The effect of the number of slices
+\end_layout
+
+\begin_layout Standard
+We see in Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "posNbSlices"
+
+\end_inset
+
+ that there is a tiny decrease in the success rate when we increase the
+ number of slices but only for the success rate on labels with the smallest
+ proportion (so-called rare events if the proportion is less than 
+\begin_inset Formula $10\%$
+\end_inset
+
+).
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename NegSuccNbSlices.pdf
+	width 3in
+	height 2in
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Negative success rate with the number of slices 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ 
+\begin_inset CommandInset label
+LatexCommand label
+name "totNbSlices"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename PosSuccNbSlices.pdf
+	width 3in
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Positive success rate with the number of slices 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ 
+\begin_inset CommandInset label
+LatexCommand label
+name "posNbSlices"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Success rates as a function of slice count.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Paragraph
+The effect of the regularization parameter 
+\begin_inset Formula $\lambda$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+It is a known fact that increasing the regularization parameter makes the
+ solution sparser so finding this pattern is reassuring for the validation
+ process.
+ We can actually see that in Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "CardinalityLambda"
+
+\end_inset
+
+ which shows the evolution of the cardinality of the current estimate for
+ different 
+\begin_inset Formula $\lambda$
+\end_inset
+
+'s.
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename CardinalityLambda.pdf
+	width 3.5in
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Cardinality for different 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ 
+\begin_inset CommandInset label
+LatexCommand label
+name "CardinalityLambda"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename DualResidual.pdf
+	width 3.5in
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Cardinality for different 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ 
+\begin_inset CommandInset label
+LatexCommand label
+name "DualResidualLambda"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Cardinality comparisons as 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ varies.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename CardinalityRho.pdf
+	width 5in
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Cardinality for different 
+\begin_inset Formula $\rho$
+\end_inset
+
+ 
+\begin_inset CommandInset label
+LatexCommand label
+name "CardinalityRho"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+This parameter 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ influences also the number of iterations before meeting the stopping criteria.
+ The Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "DualResidualLambda"
+
+\end_inset
+
+ shows that it is the dual residual criterion that makes the iterations
+ stop quicker when 
+\begin_inset Formula $\lambda=1$
+\end_inset
+
+.
+ In 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "DualResidualLambda"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Paragraph
+The effect of the augmented Lagrangian parameter 
+\begin_inset Formula $\rho$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We can see in Figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "CardinalityRho"
+
+\end_inset
+
+ that similarly to 
+\begin_inset Formula $\lambda$
+\end_inset
+
+, 
+\begin_inset Formula $\rho$
+\end_inset
+
+ seems to have an influence on the cardinality of the current estimate 
+\begin_inset Formula $z^{k}$
+\end_inset
+
+.
+ 
+\begin_inset Formula $\rho$
+\end_inset
+
+ influences also the number of iterations as we see that for 
+\begin_inset Formula $\rho=10$
+\end_inset
+
+, the number of iterations is less than 
+\begin_inset Formula $20$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Subsection
+Large-scale experiments
+\end_layout
+
+\begin_layout Subsubsection
+Testing different gradient algorithms
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename compareGradients.pdf
+	width 3in
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Comparison of average time between iterations 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ 
+\begin_inset CommandInset label
+LatexCommand label
+name "gradientTimes"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename compareGradientsLoss.pdf
+	width 3in
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Decrease in loss for two gradient algorithms 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ 
+\begin_inset CommandInset label
+LatexCommand label
+name "gradientLoss"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Gradient methods comparisons
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Contrary to what one might think the accelerated gradient does not perform
+ better in terms of average time per iteration.
+ However it seems to perform slightly better in terms of decrease in the
+ loss function.
+ We cannot say much more at this stage of our analysis and one would need
+ to perform a deeper analysis to be able to compare properly the performances
+ of these two gradient algorithms.
+ Since this method only augments the line search value, comparable results
+ are not too shocking.
+\end_layout
+
+\begin_layout Subsubsection
+Comparing different clusters configurations
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Graphics
+	filename compareClusters.pdf
+	width 4in
+
+\end_inset
+
+ 
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Comparison of average time between iterations 
+\begin_inset Formula $\lambda$
+\end_inset
+
+ 
+\begin_inset CommandInset label
+LatexCommand label
+name "clusterTimes"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsubsection
+Experiments on large data sets
+\end_layout
+
+\begin_layout Standard
+To test the EC2 distributed architecture's ability to handle a large dataset,
+ we ran a trial on both the synthetic data and Reuters data with 20,000
+ documents and 2000 features.
+ The EC2 cluster had 1 master and 13 slaves all running m1.large instance
+ types.
+ The dataset was split into 50 slices.
+\end_layout
+
+\begin_layout Standard
+Below is the performance of the datasets after 20 iterations.
+\end_layout
+
+\begin_layout Paragraph
+Synthetic data
+\end_layout
+
+\begin_layout Itemize
+proportion of positive events (
+\begin_inset Formula $b_{i}=1$
+\end_inset
+
+) = 45.3% 
+\end_layout
+
+\begin_layout Itemize
+negative success rate = 
+\begin_inset Formula $0.7518$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+positive success rate = 
+\begin_inset Formula $0.6104$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+total success rate = 
+\begin_inset Formula $0.6909$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Paragraph
+Reuters data
+\end_layout
+
+\begin_layout Itemize
+proportion of rare (positive) events : 
+\begin_inset Formula $2.97\%$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+negative success rate = 
+\begin_inset Formula $1$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+positive success rate = 
+\begin_inset Formula $0$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Itemize
+total success rate = 
+\begin_inset Formula $0.9703$
+\end_inset
+
+ 
+\end_layout
+
+\begin_layout Standard
+While it is disheartening to see the Reuters data-set perform poorly on
+ the rare-event data, we have at least verified the accuracy of the algorithm,
+ as it was able to correctly classify the synthetic data most of the time.
+ We suspect that if more than 20 iterations were run, that the performance
+ would increase on both the synthetic and Reuters data.
+\end_layout
+
+\begin_layout Standard
+Possible explanations for the poor performance on the Reuters set may be
+ the rare event bias, inherent noise in the classification methods of the
+ Reuters humans, and too few iterations.
+\end_layout
+
+\begin_layout Subsection
+K-fold cross validation
+\end_layout
+
+\begin_layout Standard
+Cross-validation is a method used to evaluate how the results of a statistical
+ analysis can be generalized to an independent data set.
+ Actually, we evaluate here its power of prediction.
+ This method uses two kind of data: a training data set where we perform
+ our analysis, and a validation data set used to test the results obtained
+ from the training set.
+ Multiple rounds can be performed, changing the training and the validation
+ sets.
+ Then, to get the final result, we realize a weighted average according
+ to the rate of success of each solution.
+ In the K-fold cross validation, our original set is split into K different
+ sets.
+ We select K-1 sets to create the training set, and the remaining one is
+ used as validation set.
+ Then we process K times such that each sample is used as validation set.
+ Each iteration gives us a vector solution and a success rate.
+ The final solution is obtain in pondering each sub - solution with their
+ success rate.
+\end_layout
+
+\begin_layout Standard
+In the figure 
+\begin_inset CommandInset ref
+LatexCommand ref
+reference "Kfoldvssolve"
+
+\end_inset
+
+, we compared the results obtained with the regular ADMM method and the
+ results obtained by using also the K-fold method.
+ The experiment consisted in using 
+\begin_inset Formula $900$
+\end_inset
+
+ documents spilt into 
+\begin_inset Formula $20$
+\end_inset
+
+ slices and considering 
+\begin_inset Formula $100$
+\end_inset
+
+ features.
+ Then over the 
+\begin_inset Formula $20$
+\end_inset
+
+ slices, we considered for each 
+\begin_inset Formula $K$
+\end_inset
+
+, 
+\begin_inset Formula $K$
+\end_inset
+
+ folders on which we applied both the regular ADMM method and the ADMM method
+ with the K fold cross validation method.
+ Thus it gave us two different solutions that we used to calculate the success
+ rate on the 
+\begin_inset Formula $20-K$
+\end_inset
+
+ remaining folders.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Graphics
+	filename successratevsK.pdf
+	width 5in
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+Success Rate vs K
+\begin_inset CommandInset label
+LatexCommand label
+name "Kfoldvssolve"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The results obtained are not really what we were expecting.
+ Indeed could think that the ADMM method combined with the K fold cross
+ validation would have give us better results than when when we use the
+ ADMM method alone.
+ Actually the success rates are almost the same in both cases.
+ But we can expect that when we use much more documents and features, we
+ would be able to see a difference between the two methods.
+ But what is very interesting to notice is that when we increase the training
+ set, the success rate on the validation set increases as well.
+ It a result we were expecting.
+\end_layout
+
+\begin_layout Section
+Shortcomings of Caching in Spark and Proposed Improvements
+\end_layout
+
+\begin_layout Standard
+Currently in Spark, caching is accomplished by explicitly caching a particular
+ RDD, which serves as a starting point for many different transformation
+ processes.
+ While this process fits many use cases, such as Monte Carlo methods for
+ sampling, our process does not fit into this mold.
+\end_layout
+
+\begin_layout Standard
+In our problem, we have two distinct concept: invariant data, and iterative
+ data.
+ The invariant data for a slice 
+\begin_inset Formula $i$
+\end_inset
+
+ can be succinctly expressed as 
+\begin_inset Formula $C_{i}$
+\end_inset
+
+ where
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+C_{i}=\left[\begin{array}{cc}
+-b_{i} & \text{diag}\left(b_{i}\right)A_{i}\end{array}\right]
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+This data does not change from iteration to iteration and we would like
+ to cache this data set on each local node.
+ The iterative data is the tuple 
+\begin_inset Formula $\left(x_{i}^{k},u_{i}^{k}\right),$
+\end_inset
+
+where 
+\begin_inset Formula $i$
+\end_inset
+
+ is the slice and 
+\begin_inset Formula $k$
+\end_inset
+
+ is the iteration number.
+ We have the relation for each slice 
+\begin_inset Formula $i$
+\end_inset
+
+ and each iteration 
+\begin_inset Formula $k$
+\end_inset
+
+:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\[
+\left(x_{i}^{k+1},u_{i}^{k+1}\right)=f\left(x_{i}^{k},u_{i}^{k},z^{k},C_{i}\right)
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Therefore, the iterative data must be updated with a reference to the invariant
+ data and its previous iteration.
+ If both types of data must never be present outside its local node, then
+ there are currently two options that could be considered.
+ First, there could exist a way of pairing up two 
+\emph on
+RDD
+\emph default
+'s, where one holds the cached invariant data and the other holds a constantly
+ cached iterative data tuple.
+ The functional term for this pairing is a 
+\begin_inset Formula $\texttt{zip}$
+\end_inset
+
+ action.
+ This approach is appealing, as the invariant data would have nice resilience
+ due to its invariance, while the iterative data does not enjoy such reprieve
+ due to its temporal nature.
+ This solution is not ideal as it does a poor job of following the abstraction
+ laid out by the 
+\emph on
+RDD 
+\emph default
+object, where absolute location is not of a concern, only relative persistence
+ of location.
+ By zipping two 
+\emph on
+RDD
+\emph default
+'s together, one must view 
+\emph on
+RDD
+\emph default
+'s as a sequence, which is a poor abstraction for distributed data sets.
+\end_layout
+
+\begin_layout Standard
+The second approach would be to directly support a specialized 
+\emph on
+RDD
+\emph default
+ type that lets transformation occur on top of a invariant layer.
+ This is the model that was envisioned in our current implementation.
+ A pictorial representation of our approach is given in 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "fig:The-iterative-LearnEnv"
+
+\end_inset
+
+.
+ A 
+\emph on
+DataEnv
+\emph default
+ is simply an environment which holds functionality related to the invariant
+ data.
+ Let us call this invariant 
+\emph on
+RDD
+\emph default
+ an 
+\emph on
+Environmental RDD
+\emph default
+, which gets the point across that this RDD will be used as a environment
+ in which to iterate a sequence of 
+\emph on
+RDD
+\emph default
+'s.
+ Then, subsequent transformations of the 
+\emph on
+Environmental RDD
+\emph default
+ will have the environment cached locally, thus saving expense of either
+ serializing the environment locally into cache at every iteration, or even
+ worse, over the wire every iteration.
+ In our example, the subsequent 
+\emph on
+RDD's 
+\emph default
+are 
+\emph on
+LearnEnv
+\emph default
+'s, which serve the purpose of learning the optimal feature vector over
+ the 
+\emph on
+DataEnv
+\emph default
+.
+ In our current implementation, we decide that caching locally at every
+ iteration is better than serializing the entire 
+\begin_inset Formula $C$
+\end_inset
+
+ data set over the wire at every iteration, and this what is implemented
+ in our code.
+ This solution is superior to the 
+\begin_inset Formula $\texttt{zip}$
+\end_inset
+
+ approach, as it does not require the sequential abstraction, and only a
+ single 
+\emph on
+RDD 
+\emph default
+needs to be maintained.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float figure
+wide false
+sideways false
+status collapsed
+
+\begin_layout Plain Layout
+\align center
+\begin_inset Graphics
+	filename dataenv.pdf
+	width 4in
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption
+
+\begin_layout Plain Layout
+The iterative 
+\emph on
+LearnEnv 
+\emph default
+iterates over the invariant 
+\emph on
+DataEnv
+\emph default
+, where both data types are created in a distributed manner.
+\begin_inset CommandInset label
+LatexCommand label
+name "fig:The-iterative-LearnEnv"
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+While such an implementation has not been worked out at this point, the
+ main mechanism would be allowing particular super-closures of 
+\emph on
+RDD
+\emph default
+'s to be cacheable, which is feature in waiting for Spark.
+\end_layout
+
+\begin_layout Paragraph
+Foundation of Collaborative Filtering Optimization Framework
+\end_layout
+
+\begin_layout Standard
+Not only does this solution work well with our current problem, but we also
+ see it as the basic construct on which all collaborative filtering distributed
+ optimization techniques could be created.
+ Future work is to devise a collaborative filtering library inside of Spark,
+ which allows for optimal slicing of data-sets and automatic scaling of
+ the cluster size to suit the needs of the current data set.
+ At the core of this library will lie the 
+\emph on
+Environmental RDD
+\emph default
+ object, which will fully utilize the power of the Spark framework, and
+ enable a style of convex optimization that currently does not exist at
+ super-large scale.
+ Combined with the optimal deployment of slices to number of instances and
+ instance types, this approach can simply add more and more nodes to the
+ current cluster to support more and more data.
+ If particular cost functions are made customizable via some plugin architecture
+, then a general purpose framework could be developed.
+ For instance, one could allow the customization of desired sparsity along
+ with loss function to give users a large level of customization, permitting
+ 
+\emph on
+SVM
+\emph default
+ solutions, 
+\emph on
+Lasso
+\emph default
+ solutions, and many more than just 
+\emph on
+SLR
+\emph default
+.
+\end_layout
+
+\begin_layout Section
+Future Work
+\end_layout
+
+\begin_layout Paragraph
+Completion and Analysis of Reuters Data
+\end_layout
+
+\begin_layout Standard
+We were not able to complete the analysis of the Reuters Data due to time
+ constraints and some problems with handling rare event data.
+ Once the quota is lifted on the number of EC2 instances allowed at one
+ time and more robust error handling is achieved, then the problem size
+ can easily be scaled up.
+ We will also have to investigate whether the 
+\begin_inset Quotes eld
+\end_inset
+
+rare event
+\begin_inset Quotes erd
+\end_inset
+
+ phenomenon is actually effecting our results, or if there are other reasons
+ for our poor results on this specific data set at this point.
+\end_layout
+
+\begin_layout Paragraph
+Splitting across Samples and Features
+\end_layout
+
+\begin_layout Standard
+The sparsity in the IDF data set is substantial, due to its power law.
+ This creates the possibility to partition our data along two different
+ dimensions.
+ We have not done research yet into how this can be achieved, but if both
+ dimensions can be reduced in our problem, then additional benefits start
+ to arise, like the ability to use second order methods on the unconstrained
+ minimization sub-problems.
+\end_layout
+
+\begin_layout Paragraph
+Extending the Framework
+\end_layout
+
+\begin_layout Standard
+While we have only discussed the extension of our work to the sparse logistic
+ regression problem, it is evident that our work can be abstracted to a
+ higher level, where we could permit sub-classes to provide the specific
+ cost functions, and our super-class takes care of the work of running Spark
+ and collaborative filtering.
+\end_layout
+
+\begin_layout Standard
+\begin_inset CommandInset bibtex
+LatexCommand bibtex
+bibfiles "bib"
+options "plain"
+
+\end_inset
+
+
+\end_layout
+
+\end_body
+\end_document
