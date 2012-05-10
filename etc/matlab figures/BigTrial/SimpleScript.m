@@ -6,9 +6,11 @@
 % Then you have the BigTrial file and you can run this script
 
 % experiment with numbers
+
 % noise standard deviation = sqrt(0.1)
+
 % lambda = 1
-% nDocs = 500
+% nDocs = 1000
 % nFeatures = 50
 % maxIters = 100
 % nSlices = 5

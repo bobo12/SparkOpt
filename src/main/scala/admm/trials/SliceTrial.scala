@@ -2,6 +2,7 @@ package admm.trials
 
 import admm.data.ParallelizedSyntheticData.generate_data
 import admm.opt.{SLRSparkImmutable, SLRConfig}
+import admm.stats.{SuccessRate, SuccessTracker}
 
 /**
  * User: jdr
@@ -55,11 +56,17 @@ class SliceTrial3 extends SLRLaunchable {
 
   def launchWithConfig(kws: Map[String, String], conf: SLRConfig) {
     val slices = kws.get("slices").get.split(",").map(_.toInt)
+    val fn = kws.get("fn").get
     slices.foreach{slice =>{
+      conf.setOutput(fn+slice.toString)
       conf.nSlices = slice
       val rdd = generate_data(sc,conf,.5,.5)
       val stats = SLRSparkImmutable.solve(rdd, conf)
-      stats.dumpToFile
+      val successTracker = new SuccessTracker
+      successTracker.stat = stats
+      val suc = SuccessRate.successRate(rdd, Some(stats.z), conf = conf)
+      successTracker.successResult(suc)
+      successTracker.dumpToFile
     }}
   }
 }

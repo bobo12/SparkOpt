@@ -10,6 +10,7 @@ import collection.immutable.HashMap
 import cern.colt.matrix.tdouble.{DoubleFactory2D, DoubleFactory1D}
 import admm.opt.{SLRConfig, SLRSparkImmutable}
 import admm.stats.SuccessRate.successRate
+import admm.stats.{SuccessRate, SuccessTracker}
 
 /**
  * User: jdr
@@ -168,8 +169,36 @@ object StandardizedData {
     println(successRate(trainSet, conf = conf))
   }
 
+  def mainlocalBoris(args: Array[String]) {
+    val Apath = "etc/A.data"
+    val Bpath = "etc/b.data"
+    val fn = "trial"
+    val ndocs = 700
+    val nfeatures = 50
+    val nslices = 5
+    val niters = 10
+    val conf = new SLRConfig
+    conf.nDocs = ndocs
+    conf.nFeatures = nfeatures
+    conf.nSlices = nslices
+    conf.nIters = niters
+    conf.setOutput(fn)
+    val trainSet = slicedLocalStandard(new SparkContext("local","test"),Apath, Bpath,conf)
+    val stats = SLRSparkImmutable.solve(trainSet, conf)
+
+    //val statsSR = computeSuccessRates()
+    val successTracker = new SuccessTracker
+    successTracker.stat = stats
+    val suc = SuccessRate.successRate(trainSet, Some(stats.z), conf = conf)
+    successTracker.successResult(suc)
+    successTracker.dumpToFile
+    //val testSet = slicedStandardizedSet(new SparkContext("local[25]","test"),Apath, Bpath,hdfsroot,conf, startDoc = ndocs)
+    //println(successRate(trainSet, conf = conf))
+    //println(successRate(trainSet, conf = conf))
+  }
+
   def main(args: Array[String]) {
-    mainlocal(args)
+    mainlocalBoris(args)
   }
 
 

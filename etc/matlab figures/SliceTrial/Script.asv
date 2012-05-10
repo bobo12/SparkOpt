@@ -1,0 +1,111 @@
+% Big Trial
+% correspond to SliceTrial3 launcher configurration (launch ID 13)
+% To run this experiment just run admm.trials.Launcher with the following
+% arguments :
+% local 12 fn SliceTrial sparsityA 0.5 sparsityW 0.5 nd 700 nf 50 ns 10
+% slices 1,5,10 lam 1 ni 100
+
+% Then you have the SliceTrial1, SliceTrial5, SliceTrial10 file and you can run this script
+
+% experiment with numbers
+
+% noise standard deviation = sqrt(0.1)
+
+% lambda = 1
+% nDocs = 700
+% nFeatures = 50
+% maxIters = 100
+% nSlices = [1,5,10]
+% absTol = 1.0000e-004
+% relTol = 0.0100
+% rho = 1
+% time = 10636
+% topicId = 0
+
+import java.util.ArrayList;
+
+x(1)= loadjson('../../../SliceTrial1');
+x(2)= loadjson('../../../SliceTrial5');
+x(3)= loadjson('../../../SliceTrial10');
+
+for j=1:3
+
+    display('-----------------------------------------------------------------')
+    display('PROPORTION OF POSITIVE LABELS IN SYNTHEIC DATA');
+    disp(x(j).pos);
+    display('RESULTS OF ALGORITHM');
+    display('positive success rate = ');
+    disp(x(j).psr);
+    display('negative success rate = ');
+    disp(x(j).nsr);
+    display('total success rate = ');
+    disp(x(j).tsr);
+
+    %loss function
+    y = [x(j).iters.loss];
+    figure(1)
+    plot(y(y>0)/min(y(y>0)));
+    xlabel('iteration');
+    ylabel('p/p*');
+    title('Decrease in loss function');
+
+    %primal residual
+    r = [x(j).iters.pres];
+    figure(2)
+    plot(r(r>0));
+    xlabel('iteration');
+    ylabel('primal residual');
+    title('Primal residual evolution');
+
+    %dual residual
+    s = [x(j).iters.dres];
+    figure(3)
+    plot(s(s>0));
+    xlabel('iteration');
+    ylabel('dual residual');
+    title('Dual residual evolution');
+
+    %time of each iteration
+    t = [x(j).iters.time];
+    figure(4)
+    plot(t(t>100))
+    xlabel('iteration');
+    ylabel('time');
+    title('Time per iteration');
+
+    %primal epsilon evolution
+    peps = [x(j).iters.peps];
+    figure(5)
+    plot(peps(peps>0));
+    xlabel('iteration');
+    ylabel('primal epsilon');
+    title('Primal epsilon evolution');
+
+    %dual epsilon evolution
+    deps = [x(j).iters.deps];
+    figure(6)
+    plot(deps(deps>0));
+    xlabel('iteration');
+    ylabel('dual epsilon');
+    title('Dual epsilon evolution');
+    
+    figure(7)
+
+    Names = ArrayList();
+    Names.add(['DecreaseLoss',num2str(i)]);
+    Names.add(['PrimalResidual',num2str(i)]);
+    Names.add(['DualResidual',num2str(i)]);
+    Names.add(['TimePerIteration',num2str(i)]);
+    Names.add(['PrimalEpsilon',num2str(i)]);
+    Names.add(['DualEpsilon',num2str(i)]);
+
+    for i = 1:6
+        figure(i)
+        saveName = Names.get(i-1);
+        saveas(gcf, saveName, 'png');
+        saveas(gcf, saveName, 'fig');
+        close
+    end
+end
+
+%%Now look at results as a function nbSlices
