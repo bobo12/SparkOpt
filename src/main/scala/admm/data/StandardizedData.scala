@@ -75,7 +75,7 @@ object StandardizedData {
       .groupBy(_._1 % nSlices).map(tup => tup._2).map(StandardizedReutersSet(_))
       .asInstanceOf[RDD[ReutersSet]]
   }
-  def slicedLocalStandard(sc: SparkContext, aPath: String, bPath: String, conf: SLRConfig, startDoc: Int = 0, startFeature: Int = 0) = {
+  def slicedLocalStandard(sc: SparkContext, aPath: String, bPath: String, conf: SLRConfig) = {
     val nFeatures = conf.nFeatures
     val nDocs = conf.nDocs
     val nSlices = conf.nSlices
@@ -118,7 +118,7 @@ object StandardizedData {
       val value = splits(2).toDouble
       (i,j,value)
     })
-      .filter(tup => tup._1 <= (startDoc + nDocs) && tup._2 <= (startFeature + nFeatures) && tup._1 > startDoc && tup._2 > startFeature)
+      .filter(tup => tup._1 <= (conf.startDoc + nDocs) && tup._2 <= (conf.startFeature + nFeatures) && tup._1 > conf.startDoc && tup._2 > conf.startFeature)
       .groupBy(tup => tup._1)
       .map(tup => (tup._1, tup._2.map(trips => (trips._2, trips._3)), bMap.get(tup._1).get))
       .groupBy(_._1 % nSlices).map(tup => tup._2).map(StandardizedReutersSet(_))

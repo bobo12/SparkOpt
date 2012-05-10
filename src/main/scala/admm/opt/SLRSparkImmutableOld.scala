@@ -21,7 +21,7 @@ object SLRSparkImmutableOld {
 
   def solve(rdd: RDD[ReutersSet], conf: SLRConfig = defaultConfig ) =  {
     val rho = conf.rho
-    val lambda = conf.lambda
+    val lambda = conf.lam
     val absTol = conf.absTol
     val relTol = conf.relTol
     val nIters = conf.nIters

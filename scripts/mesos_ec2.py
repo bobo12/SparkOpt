@@ -441,9 +441,7 @@ def main():
     setup_cluster(conn, master_nodes, slave_nodes, zoo_nodes, opts, True)
 
   elif action == "destroy":
-    response = raw_input("Are you sure you want to destroy the cluster " +
-        cluster_name + "?\nALL DATA ON ALL NODES WILL BE LOST!!\n" +
-        "Destroy cluster " + cluster_name + " (y/N): ")
+    response = "y"
     if response == "y":
       (master_nodes, slave_nodes, zoo_nodes) = get_existing_cluster(
           conn, opts, cluster_name)

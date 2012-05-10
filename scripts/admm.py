@@ -102,6 +102,9 @@ def run_spark_program(prog_name, *args, **kwargs):
 def launch_trial(trial_id, *args):
     run_spark_program("admm.trials.Launcher", make_master(), trial_id, *args, update=True)
     
+def launch_trial_kws(trial_id, **kwargs):
+    launch_trial(trial_id, *list(chain.from_iterable([map(str,[k,v]) for k,v in kwargs.iteritems()])))
+    
 def start_stop_trial(trial_id, *args):
     start_cluster()
     launch_trial(trial_id, *args)
@@ -132,8 +135,8 @@ def post_init(big_data = False, small_data = True):
 def run_admm_opt(file, nDocs, nFeatures, nSlices, topicIndex, nIters, update=False):
     run_spark('admm.opt.SLRSparkImmutable %s %i %i %i %i %i' % (make_master(), nDocs ,nFeatures, nSlices, topicIndex, nIters), update=update)
 
-def launch_cluster(n_slaves = 1):
-    run_cmd('./mesos-ec2 -s %i launch admm' % n_slaves)
+def launch_cluster(n_slaves = 1, i_type = 'm1.small'):
+    run_cmd('./mesos-ec2 -s %i -t %s launch admm' % (n_slaves, i_type))
 
 def stop_cluster():
     run_cmd('./mesos-ec2 stop admm')
@@ -147,7 +150,7 @@ def launch_local(launch_id, **kwargs):
     kw_list = list(chain.from_iterable([map(str,[k,v]) for k,v in kwargs.iteritems()]))
     run_cmd([
         'pushd {0}'.format(MAIN_DIR),
-        "sbt 'run-main admm.trials.Launcher local {0} {1}'".format(launch_id, ' '.join(kw_list)),
+        "sbt 'run-main admm.trials.Launcher local[10] {0} {1}'".format(launch_id, ' '.join(kw_list)),
         'popd'
         ])
 

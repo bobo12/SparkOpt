@@ -5,8 +5,8 @@
 rand('seed', 0);
 randn('seed', 0);
 
-n = 1000; 
-m = 5000;
+n = 10000; 
+m = 100000;
 
 w = sprandn(n, 1, .1);  % N(0,1), 10% sparse
 v = randn();            % random intercept
@@ -19,5 +19,7 @@ b = sign(X*w + v + sqrt(0.01)*randn(m,1)); % labels with noise
 
 % A = spdiags(-b, 0, m, m) * X;
 
-savesparsemat(X,'/Users/jdr/Documents/github-projects/SparkOpt/etc/A.data')
-savesparsevec(b,'/Users/jdr/Documents/github-projects/SparkOpt/etc/b.data')
+savesparsemat(X,'/Users/jdr/Documents/github-projects/SparkOpt/etc/A.100000x10000.data');
+disp('done A')
+savesparsevec(b,'/Users/jdr/Documents/github-projects/SparkOpt/etc/b.100000.data');
+disp('done b')

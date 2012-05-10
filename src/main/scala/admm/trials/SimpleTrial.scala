@@ -1,8 +1,8 @@
 package admm.trials
 
-import admm.data.ParallelizedSyntheticData
 import admm.opt.{SLRSparkImmutableOld, SLRSparkImmutable, SLRConfig}
 import admm.stats.{SuccessTracker, SuccessRate}
+import admm.data.{StandardizedData, ParallelizedSyntheticData}
 
 /**
  * User: jdr
@@ -11,24 +11,33 @@ import admm.stats.{SuccessTracker, SuccessRate}
  */
 
 class SimpleTrial extends SLRLaunchable {
-  def launchID = 100
+  def launchID = 200
 
   def launchWithConfig(kws: Map[String, String], conf: SLRConfig) {
-    val rdd = ParallelizedSyntheticData.generate_data(sc, conf, .5, .5).cache()
-    val confCopy: SLRConfig = conf.copy
-    confCopy.setOutput("/Users/jdr/Desktop/reg")
-    conf.setOutput("/Users/jdr/Desktop/accel")
+    val rdd = StandardizedData.slicedLocalStandard(sc, "etc/A.data" ,"etc/b.data",conf).cache()
     val accel = SLRSparkImmutable.solve(rdd, conf)
-    val reg = SLRSparkImmutableOld.solve(rdd, confCopy)
     val asuc = SuccessRate.successRate(rdd, Some(accel.z), conf = conf)
-    val rsuc = SuccessRate.successRate(rdd, Some(reg.z), conf = confCopy)
     val accelST = new SuccessTracker
     accelST.stat = accel
     accelST.successResult(asuc)
     accelST.dumpToFile
-    val regST = new SuccessTracker
-    regST.stat = reg
-    regST.successResult(rsuc)
-    regST.dumpToFile
+  }
+}
+
+class SimpleHDFSTrial extends SLRLaunchable {
+  def launchID = 201
+
+  def launchWithConfig(kws: Map[String, String], conf: SLRConfig) {
+    val aPath = kws("apath")
+    val bPath = kws("bpath")
+    val hdfsPath = kws("hdfs")
+    val rdd = StandardizedData.slicedStandardizedSet(sc,aPath,bPath,hdfsPath,conf).cache()
+    val accel = SLRSparkImmutable.solve(rdd, conf)
+    val asuc = SuccessRate.successRate(rdd, Some(accel.z), conf = conf)
+    val accelST = new SuccessTracker
+    accelST.stat = accel
+    accelST.successResult(asuc)
+    accelST.dumpToFile
+    sc.stop()
   }
 }

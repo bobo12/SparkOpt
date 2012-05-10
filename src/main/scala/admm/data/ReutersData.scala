@@ -13,6 +13,7 @@ import org.apache.hadoop.mapred.{TextInputFormat, FileInputFormat, JobConf}
 import org.apache.hadoop.io.{Text, LongWritable}
 import spark.SparkContext._
 import spark.{RDD, SparkContext}
+import admm.opt.SLRConfig
 
 object ReutersData {
 
@@ -68,13 +69,13 @@ object ReutersData {
 
 
 
-  class UntaggedReutersSet(records: scala.Seq[UntaggedRecord], n: Int) extends ReutersSet with Serializable {
+  class UntaggedReutersSet(records: scala.Seq[UntaggedRecord], n: Int, nStart: Int = 0) extends ReutersSet with Serializable {
     val m = records.size
     def samples: SampleSet = {
       val matrix = DoubleFactory2D.sparse.make(m,n)
       records.zipWithIndex.foreach{
         case (record, recordInd) => {
-          record.idfRecords.filter{case (idfId, idfScore) => idfId < n}.foreach{
+          record.idfRecords.filter{case (idfId, idfScore) => idfId < (n + nStart) && idfId >= nStart}.foreach{
             case (idfId, idfScore) => {
               matrix.setQuick(recordInd, idfId,idfScore)
             }
@@ -93,12 +94,12 @@ object ReutersData {
     }
   }
 
-  def slicedReutersRDD(sc: SparkContext, filePath: String, hdfsBase: String, nDocs: Int, nFeatures: Int, nSlices: Int, topicId: Int) = {
+  def slicedReutersRDD(sc: SparkContext, conf: SLRConfig, filePath: String, hdfsBase: String) = {
     val jobConf = new JobConf()
     jobConf.addResource(new Path(hdfsBase + "/conf/core-site.xml"))
     jobConf.addResource(new Path(hdfsBase + "/conf/hdfs-site.xml"))
     FileInputFormat.addInputPath(jobConf, new Path(filePath))
-    val rdd = sc.hadoopRDD(jobConf, classOf[TextInputFormat], classOf[LongWritable], classOf[Text], nSlices)
+    val rdd = sc.hadoopRDD(jobConf, classOf[TextInputFormat], classOf[LongWritable], classOf[Text], conf.nSlices)
     val strings = rdd.map(pair => pair._2.toString)
     val idStrings = strings.map(line => {
       val splits = line.split(" ", 2)
@@ -106,10 +107,10 @@ object ReutersData {
       val content = splits.tail.head
       (id, content)
     })
-    val limitedIds = idStrings.filter(_._1 < nDocs)
-    val modIds = limitedIds.map(pair => (pair._1 % nSlices, pair._2))
-    val groups = modIds.groupByKey(nSlices)
-    val sets: RDD[ReutersSet] = groups.map(_._2).map(lines => new UntaggedReutersSet(lines.map(UntaggedRecord(_)), nFeatures))
+    val limitedIds = idStrings.filter(ids => ids._1 >= conf.startDoc && ids._1 < (conf.startDoc +conf.nDocs))
+    val modIds = limitedIds.map(pair => (pair._1 % conf.nSlices, pair._2))
+    val groups = modIds.groupByKey(conf.nSlices)
+    val sets: RDD[ReutersSet] = groups.map(_._2).map(lines => new UntaggedReutersSet(lines.map(UntaggedRecord(_)), conf.nFeatures, conf.startFeature))
     sets
   }
 

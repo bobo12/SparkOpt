@@ -21,7 +21,10 @@ object Launcher {
     new SliceTrial,
     new SliceTrial3,
     new BigTrial,
-    new SimpleTrial
+    new SimpleTrial,
+    new SimpleHDFSTrial,
+    new AccelRegTrial,
+    new ReutersSimple
   )
 
   val launchMap = HashMap(registeredApps.map(l => l.launchID -> l): _*)

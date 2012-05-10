@@ -10,3 +10,4 @@ src/main/scala/admm/test/Playground.scala
 junk
 src/main/scala/admm/opt/SLRSparkImmutable.scala.orig
 *.orig
+etc/*.data
