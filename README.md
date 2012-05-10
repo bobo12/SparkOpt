@@ -8,20 +8,12 @@ Jack Reilly
 
 ## Navigation
 
-### ADMM related code
+### [ADMM Related Code](https://github.com/jackdreilly/SparkOpt/tree/master/src/main/scala/admm/opt)
 
-src/main/scala/admm/opt
+### [Data creation code](https://github.com/jackdreilly/SparkOpt/tree/master/src/main/scala/admm/data)
 
-### Data creation code
+### [C2 Deployment Code](https://github.com/jackdreilly/SparkOpt/tree/master/scripts/admm.py)
 
-src/main/scala/admm/data
+### [Trials](https://github.com/jackdreilly/SparkOpt/tree/master/src/main/scala/admm/trials) and [Experiments](https://github.com/jackdreilly/SparkOpt/tree/master/etc/trials.py)
 
-### EC2 Deployment Code
-
-scripts/admm.py
-
-### Trials and Experiments
-
-src/main/scala/admm/trials
-
-etc/trials.py
+### [Plotting](https://github.com/jackdreilly/SparkOpt/tree/master/scripts/etc/jsonlab)
