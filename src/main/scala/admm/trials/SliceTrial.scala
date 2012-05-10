@@ -3,6 +3,8 @@ package admm.trials
 import admm.data.ParallelizedSyntheticData.generate_data
 import admm.opt.{SLRSparkImmutable, SLRConfig}
 import admm.stats.{SuccessRate, SuccessTracker}
+import spark.SparkContext
+import admm.data.StandardizedData.slicedLocalStandard
 
 /**
  * User: jdr
@@ -55,12 +57,28 @@ class SliceTrial3 extends SLRLaunchable {
   def launchID = 12
 
   def launchWithConfig(kws: Map[String, String], conf: SLRConfig) {
+    /* val slices = kws.get("slices").get.split(",").map(_.toInt)
+     val fn = kws.get("fn").get
+     slices.foreach{slice =>{
+       conf.setOutput(fn+slice.toString)
+       conf.nSlices = slice
+       val rdd = generate_data(sc,conf,.5,.5)
+       val stats = SLRSparkImmutable.solve(rdd, conf)
+       val successTracker = new SuccessTracker
+       successTracker.stat = stats
+       val suc = SuccessRate.successRate(rdd, Some(stats.z), conf = conf)
+       successTracker.successResult(suc)
+       successTracker.dumpToFile
+     }}
+   } */
     val slices = kws.get("slices").get.split(",").map(_.toInt)
     val fn = kws.get("fn").get
+    val Apath = "etc/A.data"
+    val Bpath = "etc/b.data"
     slices.foreach{slice =>{
       conf.setOutput(fn+slice.toString)
       conf.nSlices = slice
-      val rdd = generate_data(sc,conf,.5,.5)
+      val rdd = slicedLocalStandard(new SparkContext("local","test"),Apath, Bpath,conf)
       val stats = SLRSparkImmutable.solve(rdd, conf)
       val successTracker = new SuccessTracker
       successTracker.stat = stats
@@ -70,5 +88,4 @@ class SliceTrial3 extends SLRLaunchable {
     }}
   }
 }
-
 

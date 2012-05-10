@@ -1,0 +1,135 @@
+% Gradient VS Accelerated Gradient Trial
+% correspond to AccelRegTrial launcher configuration (launch ID 100)
+
+% noise standard deviation = sqrt(0.1)
+
+%Results
+
+
+%%Actual code
+import java.util.ArrayList;
+
+clear all
+close all
+clc
+
+x(1)= loadjson('acceleratedGradient');
+x(2)= loadjson('regularGradient');
+
+gradient = ArrayList();
+gradient.add('accel');
+gradient.add('reg');
+
+for j=1:2
+
+    display('-----------------------------------------------------------------')
+    display('RESULTS OF ALGORITHM');
+    display('positive success rate = ');
+    disp(x(j).psr);
+    display('negative success rate = ');
+    disp(x(j).nsr);
+    display('total success rate = ');
+    disp(x(j).tsr);
+
+    %loss function
+    y = [x(j).iters.loss];
+    figure(1)
+    plot(y(y>0)/min(y(y>0)));
+    xlabel('iteration');
+    ylabel('p/p*');
+    title('Decrease in loss function');
+
+    %primal residual
+    r = [x(j).iters.pres];
+    figure(2)
+    plot(r(r>0));
+    xlabel('iteration');
+    ylabel('primal residual');
+    title('Primal residual evolution');
+
+    %dual residual
+    s = [x(j).iters.dres];
+    figure(3)
+    plot(s(s>0));
+    xlabel('iteration');
+    ylabel('dual residual');
+    title('Dual residual evolution');
+
+    %time of each iteration
+    t = [x(j).iters.time];
+    figure(4)
+    plot(t(t>100))
+    xlabel('iteration');
+    ylabel('time');
+    title('Time per iteration');
+
+    %primal epsilon evolution
+    peps = [x(j).iters.peps];
+    figure(5)
+    plot(peps(peps>0));
+    xlabel('iteration');
+    ylabel('primal epsilon');
+    title('Primal epsilon evolution');
+
+    %dual epsilon evolution
+    deps = [x(j).iters.deps];
+    figure(6)
+    plot(deps(deps>0));
+    xlabel('iteration');
+    ylabel('dual epsilon');
+    title('Dual epsilon evolution');
+
+    %cardinality
+    card = [x(j).iters.card];
+    figure(7)
+    plot(card(card>0));
+    xlabel('iteration');
+    ylabel('cardinality of current estimate z');
+    title('Evolution of the estimate''s cardinality');
+
+    Names = ArrayList();
+    Names.add(['DecreaseLoss',gradient.get(j-1)]);
+    Names.add(['PrimalResidual',gradient.get(j-1)]);
+    Names.add(['DualResidual',gradient.get(j-1)]);
+    Names.add(['TimePerIteration',gradient.get(j-1)]);
+    Names.add(['PrimalEpsilon',gradient.get(j-1)]);
+    Names.add(['DualEpsilon',gradient.get(j-1)]);
+    Names.add(['Cardinality',gradient.get(j-1)]);
+
+    for i = 1:7
+        figure(i)
+        saveName = Names.get(i-1);
+        saveas(gcf, saveName, 'png');
+        saveas(gcf, saveName, 'fig');
+        close
+    end
+end
+
+%compare time iterations between the two algorithms
+tAccel = [x(1).iters.time];
+tReg = [x(2).iters.time];
+figure()
+set(0,'DefaultAxesLineStyleOrder',{'-',':'})
+plot(tAccel(tAccel>0));
+hold on
+plot(tReg(tReg>0));
+legend('accelerated gradient','regular gradient');
+xlabel('iteration');
+ylabel('time per iteration');
+title('Time per iteration for two different gradient algorithms');
+saveas(gcf, 'compareGradients', 'png');
+saveas(gcf, 'compareGradients', 'fig');
+
+%compare loss decrease between the two algorithms
+lossAccel = [x(1).iters.loss];
+lossReg = [x(2).iters.loss];
+figure()
+plot(lossAccel(lossAccel>0));
+hold on
+plot(lossReg(lossReg>0));
+legend('accelerated gradient','regular gradient');
+xlabel('iteration');
+ylabel('loss');
+title('Decrease in loss function for two different algorithms');
+saveas(gcf, 'compareGradientsLoss', 'png');
+saveas(gcf, 'compareGradientsLoss', 'fig');

@@ -20,6 +20,10 @@
 % time = 10636
 % topicId = 0
 
+clear all
+close all
+clc
+
 import java.util.ArrayList;
 
 x = loadjson('../../../BigTrial');
