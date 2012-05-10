@@ -136,7 +136,7 @@ object TestAlgorithm {
       fn.write("relTol = " + relTol + "\n")
       val conf = new SLRConfig
       conf.rho = rho
-      conf.lambda = lambda
+      conf.lam = lambda
       conf.nIters = maxIter
       conf.absTol = absTol
       conf.relTol = relTol

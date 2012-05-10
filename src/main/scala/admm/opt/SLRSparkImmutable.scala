@@ -32,18 +32,20 @@ class SLRConfig extends Serializable with SLRWriter{
   def copy: SLRConfig = {
     val conf = new SLRConfig
     conf.rho = rho
-    conf.lambda = lambda
+    conf.lam = lam
     conf.nIters = nIters
     conf.topicId = topicId
     conf.absTol = absTol
     conf.relTol = relTol
     conf.nDocs = nDocs
+    conf.startDoc = startDoc
     conf.nFeatures = nFeatures
+    conf.startFeature = startFeature
     conf.nSlices = nSlices
     conf
   }
   var rho = 1.0
-  var lambda = 0.1
+  var lam = 0.1
   var nIters = 10
   var topicId = 0
   var absTol = .0001
@@ -51,9 +53,11 @@ class SLRConfig extends Serializable with SLRWriter{
   var nDocs = 500
   var nFeatures = 100
   var nSlices = 1
+  var startDoc = 0
+  var startFeature = 0
   def jsonMap = {
-    HashMap(List("rho","lambda","nIters","topicId", "absTol","relTol", "nDocs", "nFeatures", "nSlices")
-      .zip(List(rho,lambda, nIters, topicId, absTol, relTol, nDocs, nFeatures, nSlices)): _*)
+    HashMap(List("rho","lam","nIters","topicId", "absTol","relTol", "nDocs", "nFeatures", "nSlices", "startDoc", "startFeature")
+      .zip(List(rho,lam, nIters, topicId, absTol, relTol, nDocs, nFeatures, nSlices, startDoc, startFeature)): _*)
   }
 }
 
@@ -78,7 +82,7 @@ object SLRSparkImmutable {
 
   def solve(rdd: RDD[ReutersSet], conf: SLRConfig = defaultConfig ) =  {
     val rho = conf.rho
-    val lambda = conf.lambda
+    val lambda = conf.lam
     val absTol = conf.absTol
     val relTol = conf.relTol
     val nIters = conf.nIters
@@ -190,7 +194,6 @@ object SLRSparkImmutable {
                 val ak = t*grad.zDotProduct(grad)
                 val bk = -t*yk.zDotProduct(grad)
                 val thetak = ak / bk
-                println("\n\n\nthetak::: " + thetak.toString + "\n\n\n\n")
                 val xNext = xPrev.copy().assign(grad, DoubleFunctions.plusMultSecond(-thetak*t))
                 if (norm < tol || (counter >= maxIter)) {
                   println("last iter: " + counter.toString)

@@ -40,7 +40,7 @@ trait SLRLaunchable extends KeywordLaunchable {
       case None => "pass"
     }
     kws.get("lam") match {
-      case Some(ans) => conf.lambda = ans.toDouble
+      case Some(ans) => conf.lam = ans.toDouble
       case None => "pass"
     }
     kws.get("rho") match {

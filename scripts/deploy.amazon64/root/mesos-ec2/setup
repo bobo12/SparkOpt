@@ -90,7 +90,8 @@ fi
 TODO="$SLAVES $ZOO $OTHER_MASTERS" # List of nodes to try (initially all)
 TRIES="0"                          # Number of times we've tried so far
 echo "SSH'ing to other cluster nodes to approve keys..."
-while [ "e$TODO" != "e" ] && [ $TRIES -lt 4 ] ; do
+while [ "e$TODO" != "e" ] && [ $TRIES -lt 15 ] ; do
+	echo "\n\n slaves left: $TODO \n\n"
   NEW_TODO=
   for slave in $TODO; do
     echo $slave
@@ -100,7 +101,7 @@ while [ "e$TODO" != "e" ] && [ $TRIES -lt 4 ] ; do
     fi
   done
   TRIES=$[$TRIES + 1]
-  if [ "e$NEW_TODO" != "e" ] && [ $TRIES -lt 4 ] ; then
+  if [ "e$NEW_TODO" != "e" ] && [ $TRIES -lt 15 ] ; then
       sleep 15
       TODO="$NEW_TODO"
       echo "Re-attempting SSH to cluster nodes to approve keys..."
@@ -133,45 +134,6 @@ for node in $SLAVES $ZOO $OTHER_MASTERS; do
   sleep 0.3
 done
 wait
-
-DOWNLOADED=0
-
-if [[ "$DOWNLOAD_METHOD" == "git" ]] ; then
-  # change git's ssh command so it does not ask to accept a keys
-  export GIT_SSH=/root/mesos-ec2/ssh-no-keychecking
-  REPOSITORY=git://github.com/mesos/mesos.git
-  echo "Checking out Mesos from $REPOSITORY"
-  pushd /root > /dev/null 2>&1
-  rm -rf mesos mesos.tgz
-  # Set git SSH command to a script that uses -o StrictHostKeyChecking=no
-  git clone $REPOSITORY mesos
-  pushd mesos 2>&1
-  git checkout -b $BRANCH --track origin/$BRANCH
-  popd > /dev/null 2>&1
-  popd > /dev/null 2>&1
-  DOWNLOADED=1
-fi
-
-# Build Mesos if we downloaded it
-if [[ "$DOWNLOADED" == "1" ]] ; then
-  echo "Building Mesos..."
-  pushd /root/mesos > /dev/null 2>&1
-  ./configure.template.ubuntu-lucid-64
-  make clean
-  make
-  popd > /dev/null 2>&1
-  if [ -d /root/spark ] ; then
-    echo "Building Spark..."
-    pushd /root/spark > /dev/null 2>&1
-    MESOS_HOME=/root/mesos make all native
-    popd > /dev/null 2>&1
-  fi
-  echo "Building Hadoop framework..."
-  pushd /root/mesos/frameworks/hadoop-0.20.2 > /dev/null 2>&1
-  ant
-  ant examples
-  popd > /dev/null 2>&1
-fi
 
 echo "Setting up Hadoop framework config files..."
 cp hadoop-framework-conf/* /root/mesos/frameworks/hadoop-0.20.2/conf
