@@ -10,6 +10,8 @@ Jack Reilly
 
 ## Navigation
 
+### [Project Report](https://github.com/jackdreilly/SparkOpt/tree/gh-pages/admmpaper.pdf)
+
 ### [ADMM Related Code](https://github.com/jackdreilly/SparkOpt/tree/master/src/main/scala/admm/opt)
 
 ### [Data creation code](https://github.com/jackdreilly/SparkOpt/tree/master/src/main/scala/admm/data)
