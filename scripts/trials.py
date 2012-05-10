@@ -130,7 +130,7 @@ def simple_hdfs_remote_test():
     stats = get_stat(localfn)
 
     
-def simple_hdfs_test(local = True, launch = False, stop = False, destroy=False, localfn = '/Users/jdr/Desktop/jazz', instance = 'm1.small'):
+def simple_hdfs_test(local = True, launch = False, stop = False, destroy=False, localfn = '/Users/jdr/Desktop/standard-large1246', instance = 'm1.large', start = False):
     launch_id = 201
     if local:
         remotefn = '/Users/jdr/Desktop/jazz'
@@ -143,15 +143,19 @@ def simple_hdfs_test(local = True, launch = False, stop = False, destroy=False, 
         b_path = '/user/root/b.data'
         hdfs_path = "/root/persistent-hdfs"
     if launch:
-        launch_cluster(10, i_type = instance)
+        launch_cluster(13, i_type = instance)
         post_init(False,False)
         store_hdfs('https://s3.amazonaws.com/admmdata/A.100000x10000.data', 'A.data')
         store_hdfs('https://s3.amazonaws.com/admmdata/b.100000.data', 'b.data')
-    nd = 100000
+    if start:
+        start_cluster()
+        store_hdfs('https://s3.amazonaws.com/admmdata/A.100000x10000.data', 'A.data')
+        store_hdfs('https://s3.amazonaws.com/admmdata/b.100000.data', 'b.data')
+    nd = 20000
     nf = 2000
-    ns = 100
-    ni = 2
-    lam = 1.0
+    ns = 50
+    ni = 20
+    lam = .1
     if local:
         launch_local(launch_id, nd = nd, nf = nf, ns = ns, ni = ni, lam = lam, fn =  remotefn, apath = A_path, bpath = b_path, hdfs=hdfs_path)
     else:
@@ -163,7 +167,7 @@ def simple_hdfs_test(local = True, launch = False, stop = False, destroy=False, 
         destroy_cluster()
     return get_stat(localfn)
 
-def reuters_hdfs_test(local = True, launch = False, stop = False, destroy=False, localfn = '/Users/jdr/Desktop/jazz', instance = 'm1.small'):
+def reuters_hdfs_test(local = True, launch = False, stop = False, destroy=False, localfn = '/Users/jdr/Desktop/reuters', instance = 'm1.large'):
     launch_id = 300
     if local:
         remotefn = '/Users/jdr/Desktop/jazz'
@@ -171,18 +175,17 @@ def reuters_hdfs_test(local = True, launch = False, stop = False, destroy=False,
         hdfs_path = "/usr/local/Cellar/hadoop/1.0.1/libexec"
     else:
         remotefn = '/root/data'
-        path = '/root/data'
+        path = '/user/root/smalldata'
         hdfs_path = "/root/persistent-hdfs"
     if launch:
-        launch_cluster(10, i_type = instance)
-        post_init(False,False)
-        store_hdfs('https://s3.amazonaws.com/admmdata/A.100000x10000.data', 'A.data')
-        store_hdfs('https://s3.amazonaws.com/admmdata/b.100000.data', 'b.data')
-    nd = 2000
-    nf = 500
-    ns = 5
-    ni = 50
-    lam = .1
+        pass
+        launch_cluster(13, i_type = instance)
+        post_init(small_data = True, big_data = False)
+    nd = 20000
+    nf = 2000
+    ns = 50
+    ni = 20
+    lam = .001
     if local:
         launch_local(launch_id, nd = nd, nf = nf, ns = ns, ni = ni, lam = lam, fn =  remotefn, path=path, hdfs=hdfs_path)
     else:
@@ -241,6 +244,6 @@ def do_stuff(x):
 if __name__ == '__main__':
     #instance_size_test()
     #broke()
-    #simple_hdfs_test()
-    do_stuff(reuters_hdfs_test())
+    simple_hdfs_test(launch=False, stop = True, local = False, destroy = False, start = True)
+    #reuters_hdfs_test(instance = "m1.large", launch = True, local = False, stop = False)
 

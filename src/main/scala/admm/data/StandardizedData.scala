@@ -70,9 +70,9 @@ object StandardizedData {
       (i,j,value)
     })
       .filter(tup => tup._1 <= (startDoc + nDocs) && tup._2 <= (startFeature + nFeatures) && tup._1 > startDoc && tup._2 > startFeature)
-      .groupBy(tup => tup._1)
+      .groupBy(tup => tup._1,nSlices)
       .map(tup => (tup._1, tup._2.map(trips => (trips._2, trips._3)), bMap.get(tup._1).get))
-      .groupBy(_._1 % nSlices).map(tup => tup._2).map(StandardizedReutersSet(_))
+      .groupBy(_._1 % nSlices, nSlices).map(tup => tup._2).map(StandardizedReutersSet(_))
       .asInstanceOf[RDD[ReutersSet]]
   }
   def slicedLocalStandard(sc: SparkContext, aPath: String, bPath: String, conf: SLRConfig) = {
