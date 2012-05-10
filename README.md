@@ -20,4 +20,4 @@ Jack Reilly
 
 ### [Trials](https://github.com/jackdreilly/SparkOpt/tree/master/src/main/scala/admm/trials) and [Experiments](https://github.com/jackdreilly/SparkOpt/tree/master/etc/trials.py)
 
-### [Plotting](https://github.com/jackdreilly/SparkOpt/tree/master/etc/jsonlab)
+### [Plotting](https://github.com/jackdreilly/SparkOpt/tree/master/etc/jsonlab) and [Plots](https://github.com/jackdreilly/SparkOpt/tree/master/etc/matlab%20figures)
